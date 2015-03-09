@@ -1,0 +1,172 @@
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+# Version Python 2.7.*
+
+import os, sys, subprocess
+import time
+
+
+os.system("clear")
+
+print
+print "  6MMMMb\  6MMMMb/  6MMMMb  `MM 6MMb  6MMb  `MM    MM "
+print " MM'    ` 6M'  `MM 6M'  `Mb  MM69 `MM69 `Mb  MM    MM "
+print " YM.      MM    MM MM    MM  MM'   MM'   MM  MM    MM "
+print "  YMMMMb  MM    MM MMMMMMMM  MM    MM    MM  MM    MM "
+print "      `Mb MM    MM MM        MM    MM    MM  MM    MM "
+print " L    ,MM YM.  ,MM YM        MM    MM    MM  YM.   MM "
+print " MYMMMM9   YMMMM9M  YMMMMM9  MM    MM    MM   YMMM9MM "
+print "                MM                                    "
+print "                MM            \script qemu/           "
+print "                MM            /code alexis\           "
+print
+
+print "sQemu versione a 64bit"
+print "----------------------"
+print
+print "[1] Creare disco"
+print "[2] Converti disco in IMG"
+print "[3] Converti disco in VMDK"
+print "[4] Ridimensiona disco"
+print "[5] Avviare disco"
+print "[6] Avviare dischi multipli"
+print "[7] CD Live"
+print "[8] CD Live con dischi multipi"
+print
+print "[15] SPICE"
+print
+print "[9] Apri Cartella"
+print "[10] Lista sistemi installati"
+print
+print "[11] Installa Plugin"
+print
+print "[0] Uscire"
+print
+print
+
+###############################################################################
+# ATTENZIONE:                                                                 #
+# Il comando di esecuzione può variare sia dal tipo di distro che utilizziamo #
+# e sia dal tipo d'installazione che abbiamo effettuato per qemu e kvm.       #
+# Le possibili varianti di lancio sono le seguenti:                           #
+# qemu - qemu-system-x86 - qemu-system-x86_64 - kvm                           #
+#                                                                             #
+# Attualmente questo programma utilizza come                                  #
+# lanciatore il comando qemu-system-x86_64 per il 64bit                       #
+###############################################################################
+
+select = input(": ")
+print
+
+def close():
+	if select == 0:
+		os.system("clear")
+		return
+close()
+
+def start():
+	if select == 5:
+		var1 = raw_input("Nome del disco creato: ")
+		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
+		var3 = input("Numero di CPU/Core da dedicare: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -soundhw all -hda %s.img -m %s"%(var3,var1,var2))
+		os.system("./sqemu64")
+start()
+
+def disco():
+	if select == 1:
+		var1 = raw_input("Nome del disco da creare: ")
+		var2 = raw_input("Capacità disco: (G=Giga M=Mega es. 8G) ")
+		os.system("qemu-img create %s.img %s"%(var1,var2))
+		os.system("./sqemu64")
+disco()
+
+def convertimg():
+	if select == 2:
+		var1 = raw_input("Inserire l'estensione origine: (raw/qcow2/vdi/vmdk/vpc) ")
+		var2 = raw_input("Inserire il nome del disco origine con estensione: ")
+		var3 = raw_input("Dare il nome al nuovo disco: ")
+		print
+		print "ATTENDERE PREGO..."
+		os.system("qemu-img convert -f %s -O raw %s %s.img"%(var1,var2,var3))
+		os.system("./sqemu64")
+convertimg()
+
+def convertvmdk():
+	if select == 3:
+		var1 = raw_input("Inserire il nome del disco origine senza estensione: ")
+		var2 = raw_input("Dare il nome al nuovo disco: ")
+		print
+		print "ATTENDERE PREGO..."
+		os.system("qemu-img convert -f raw -O vmdk %s.img %s.vmdk"%(var1,var2))
+		os.system("./sqemu64")
+convertvmdk()
+
+def live():
+	if select == 7:
+		var1 = raw_input("Nome del disco creato: ")
+		var2 = raw_input("Nome CD Iso: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var2))
+		os.system("./sqemu64")
+live()
+
+def sistemi():
+	if select == 10:
+		subprocess.call("ls *.img", shell=True)
+		print
+		restart = raw_input("Premere INVIO per continuare")
+		os.system("./sqemu64")
+sistemi()
+
+def folder():
+	if select == 9:
+		os.system("thunar")
+		os.system("./sqemu64")
+folder()
+
+def plugin():
+	if select == 11:
+		subprocess.call("sudo apt-get install xdotool", shell=True)
+		print
+		print "Installazione completata!"
+		print
+		time.sleep(3)
+		restart = raw_input("Premere INVIO per continuare")
+		os.system("./sqemu64")
+plugin()
+
+def dischi():
+	if select == 6:
+		var1 = raw_input("Nome del disco primario: ")
+		var2 = raw_input("Nome del disco secondario: ")
+		var3 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
+		var4 = input("Numero di CPU/Core da dedicare: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -soundhw all -hda %s.img -hdb %s.img -m %s"%(var4,var1,var2,var3))
+		os.system("./sqemu64")
+dischi()
+
+def livemulti():
+	if select == 8:
+		var1 = raw_input("Nome del disco primario: ")
+		var3 = raw_input("Nome del disco secondario: ")
+		var2 = raw_input("Nome CD Iso: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -hdb %s.img -vga std -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var3,var2))
+		os.system("./sqemu64")
+livemulti()
+
+def resize():
+	if select == 4:
+		var1 = raw_input("Nome del disco da ridimensiona: ")
+		var2 = raw_input("Nuova capacità disco: (G=Giga M=Mega es. 8G) ")
+		os.system("qemu-img resize %s.img %s"%(var1,var2))
+		os.system("./sqemu64")
+resize()
+
+def spice():
+	if select == 15:
+		var1 = raw_input("Nome del disco creato: ")
+		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
+		var3 = input("Numero di CPU/Core da dedicare: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -soundhw all -spice port=5900,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var1,var2))
+		os.system("./sqemu32")
+spice()
