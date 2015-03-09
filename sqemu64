@@ -120,6 +120,7 @@ sistemi()
 
 def folder():
 	if select == 9:
+		# Cambiare in base al file manager che si usa
 		os.system("thunar")
 		os.system("./sqemu64")
 folder()
