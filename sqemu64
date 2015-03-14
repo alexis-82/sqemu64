@@ -169,5 +169,5 @@ def spice():
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
 		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -soundhw all -spice port=5900,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var1,var2))
-		os.system("./sqemu32")
+		os.system("./sqemu64")
 spice()
