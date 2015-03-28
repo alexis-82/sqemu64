@@ -17,7 +17,7 @@ su apt-get install xdotool
 
 **NEXT STEP:** 
 
-chmod +x sqemu64
+./sqemu64
 
 **SCREENSHOT**
 
