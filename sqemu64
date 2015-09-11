@@ -32,10 +32,11 @@ print "[5] Avviare disco"
 print "[6] Avviare dischi multipli"
 print "[7] CD Live"
 print "[8] CD Live con dischi multipi"
+print "[9] Avvio shell"
 print
 print "[15] SPICE"
 print
-print "[9] Apri Cartella"
+print "[16] Apri Cartella"
 print "[10] Lista sistemi installati"
 print
 print "[11] Installa Plugin"
@@ -119,7 +120,7 @@ def sistemi():
 sistemi()
 
 def folder():
-	if select == 9:
+	if select == 16:
 		# Cambiare in base al file manager che si usa
 		os.system("thunar")
 		os.system("./sqemu64")
@@ -171,3 +172,17 @@ def spice():
 		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -soundhw all -spice port=5900,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var1,var2))
 		os.system("./sqemu64")
 spice()
+
+# L'opzione successivo è valido solo per sistemi operativi minimali, cioè con la sola shell.
+# Nominare l'immagine in shell.img
+# Una volta avviata la shell editare il file /etc/default/grub e aggiungere l'opzione per variare la risoluzione:
+# GRUB_GFXMODE=1024x764x32
+# GRUB_GFXPAYLOAD_LINUX=keep o 1024x764
+
+def shell():
+	if select == 9:
+		var1 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
+		var2 = input("Numero di CPU/Core da dedicare: ")
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -hda shell.img -m %s"%(var2,var1))
+		os.system("./sqemu64")
+shell()
