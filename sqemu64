@@ -173,7 +173,7 @@ def spice():
 		os.system("./sqemu64")
 spice()
 
-# L'opzione successivo è valido solo per sistemi operativi minimali, cioè con la sola shell.
+# L'opzione successiva è valido solo per sistemi operativi minimali, cioè con la sola shell.
 # Nominare l'immagine in shell.img
 # Una volta avviata la shell editare il file /etc/default/grub e aggiungere l'opzione per variare la risoluzione:
 # GRUB_GFXMODE=1024x764x32
