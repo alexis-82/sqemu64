@@ -70,7 +70,7 @@ def start():
 		var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -soundhw all -hda %s.img -m %s"%(var3,var1,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda %s.img -m %s"%(var3,var1,var2))
 		os.system("./sqemu64")
 start()
 
@@ -121,7 +121,6 @@ sistemi()
 
 def folder():
 	if select == 16:
-		# Cambiare in base al file manager che si usa
 		os.system("thunar")
 		os.system("./sqemu64")
 folder()
@@ -143,7 +142,7 @@ def dischi():
 		var2 = raw_input("Nome del disco secondario: ")
 		var3 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var4 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -soundhw all -hda %s.img -hdb %s.img -m %s"%(var4,var1,var2,var3))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -soundhw all -hda %s.img -hdb %s.img -m %s"%(var4,var1,var2,var3))
 		os.system("./sqemu64")
 dischi()
 
@@ -173,7 +172,7 @@ def spice():
 		os.system("./sqemu64")
 spice()
 
-# L'opzione successiva è valido solo per sistemi operativi minimali, cioè con la sola shell.
+# L'opzione successivo è valido solo per sistemi operativi minimali, cioè con la sola shell.
 # Nominare l'immagine in shell.img
 # Una volta avviata la shell editare il file /etc/default/grub e aggiungere l'opzione per variare la risoluzione:
 # GRUB_GFXMODE=1024x764x32
@@ -183,6 +182,6 @@ def shell():
 	if select == 9:
 		var1 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var2 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -hda shell.img -m %s"%(var2,var1))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda shell.img -m %s"%(var2,var1))
 		os.system("./sqemu64")
 shell()
