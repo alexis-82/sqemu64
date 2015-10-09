@@ -1,0 +1,36 @@
+###
+# Install package bridge-utils
+# Config file /etc/network/interface for bridging network with static IP address.
+###
+
+# interfaces(5) file used by ifup(8) and ifdown(8)
+auto lo
+iface lo inet loopback
+
+# Network
+auto eth0
+iface eth0 inet manual
+#	address 192.168.1.131
+#	netmask 255.255.255.0
+#	gateway 192.168.1.254
+#	dns-nameservers 192.168.1.133
+
+# Bridge
+auto br0
+iface br0 inet static
+	address 192.168.1.131
+	netmask 255.255.255.0
+	gateway 192.168.1.254
+	dns-nameservers 192.168.1.133
+	pre-up ip tuntap add dev tap0 mode tap user alexis
+   	pre-up ip link set tap0 up
+   	bridge_ports all tap0
+   	bridge_stp off
+   	bridge_maxwait 0
+   	bridge_fd      0
+   	post-down ip link set tap0 down
+   	post-down ip tuntap del dev tap0 mode tap
+#	bridge_ports eth0
+#	bridge_stp off
+#	bridget_fd 0
+#	bridget_maxwait 0
