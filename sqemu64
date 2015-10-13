@@ -34,12 +34,12 @@ print "[7] CD Live"
 print "[8] CD Live con dischi multipi"
 print "[9] Avvio shell"
 print
-print "[15] SPICE"
+print "[10] SPICE"
 print
-print "[16] Apri Cartella"
-print "[10] Lista sistemi installati"
+print "[11] Apri Cartella"
+print "[12] Lista sistemi installati"
 print
-print "[11] Installa Plugin"
+print "[13] Installa Plugin"
 print
 print "[0] Uscire"
 print
@@ -56,9 +56,18 @@ print
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
 ###############################################################################
 
-select = input(": ")
-print
+try:
+        select = input(": ")
+        if select >=14:
+                print "Opzione non trovata!"
+                raw_input("Premere un tasto per contiuare")
+                os.system("./sqemu64")
+except NameError:
+        print "Comando non valido!"
+        raw_input("Premere un tasto per continuare")
+        os.system("./sqemu64")
 
+        
 def close():
 	if select == 0:
 		os.system("clear")
@@ -112,7 +121,7 @@ def live():
 live()
 
 def sistemi():
-	if select == 10:
+	if select == 12:
 		subprocess.call("ls *.img", shell=True)
 		print
 		restart = raw_input("Premere INVIO per continuare")
@@ -120,7 +129,7 @@ def sistemi():
 sistemi()
 
 def folder():
-	if select == 16:
+	if select == 13:
 		os.system("thunar")
 		os.system("./sqemu64")
 folder()
@@ -164,7 +173,7 @@ def resize():
 resize()
 
 def spice():
-	if select == 15:
+	if select == 10:
 		var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
