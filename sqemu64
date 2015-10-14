@@ -5,7 +5,6 @@
 import os, sys, subprocess
 import time
 
-
 os.system("clear")
 
 print
@@ -67,7 +66,6 @@ except NameError:
         raw_input("Premere un tasto per continuare")
         os.system("./sqemu64")
 
-        
 def close():
 	if select == 0:
 		os.system("clear")
