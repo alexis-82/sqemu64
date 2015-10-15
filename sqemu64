@@ -127,13 +127,13 @@ def sistemi():
 sistemi()
 
 def folder():
-	if select == 13:
+	if select == 11:
 		os.system("thunar")
 		os.system("./sqemu64")
 folder()
 
 def plugin():
-	if select == 11:
+	if select == 13:
 		subprocess.call("sudo apt-get install xdotool", shell=True)
 		print
 		print "Installazione completata!"
