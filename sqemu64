@@ -25,7 +25,7 @@ print "----------------------"
 print
 print "[1] Creare disco"
 print "[2] Converti disco in IMG"
-print "[3] Converti disco in VMDK"
+print "[3] Converti disco da IMG a VMDK"
 print "[4] Ridimensiona disco"
 print "[5] Avviare disco"
 print "[6] Avviare dischi multipli"
@@ -38,7 +38,7 @@ print
 print "[11] Apri Cartella"
 print "[12] Lista sistemi installati"
 print
-print "[13] Installa Plugin"
+print "[13] Installa Plugins"
 print
 print "[0] Uscire"
 print
@@ -91,13 +91,22 @@ disco()
 
 def convertimg():
 	if select == 2:
-		var1 = raw_input("Inserire l'estensione origine: (raw/qcow2/vdi/vmdk/vpc) ")
+		var1 = raw_input("Inserire l'estensione origine: (raw/qcow2/vdi/vmdk/vpc/dmg) ")
 		var2 = raw_input("Inserire il nome del disco origine con estensione: ")
-		var3 = raw_input("Dare il nome al nuovo disco: ")
 		print
-		print "ATTENDERE PREGO..."
-		os.system("qemu-img convert -f %s -O raw %s %s.img"%(var1,var2,var3))
-		os.system("./sqemu64")
+                if var1 == "dmg":
+                    print
+                    print "ATTENDERE PREGO..."
+                    print
+                    os.system("dmg2img %s"%(var2))
+                    os.system("./sqemu64")
+                else:
+                    var3 = raw_input("Dare il nome al nuovo disco: ")
+                    print
+                    print "ATTENDERE PREGO..."
+                    print
+                    os.system("qemu-img convert -f %s -O raw %s %s.img"%(var1,var2,var3))
+                    os.system("./sqemu64")
 convertimg()
 
 def convertvmdk():
@@ -134,7 +143,7 @@ folder()
 
 def plugin():
 	if select == 13:
-		subprocess.call("sudo apt-get install xdotool", shell=True)
+		subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img", shell=True)
 		print
 		print "Installazione completata!"
 		print
