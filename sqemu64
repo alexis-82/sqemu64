@@ -101,7 +101,7 @@ def convertimg():
                     os.system("dmg2img %s"%(var2))
                     os.system("./sqemu64")
                 else:
-                    var3 = raw_input("Dare il nome al nuovo disco: ")
+                    var3 = raw_input("Dare il nome al nuovo disco senza estensione: ")
                     print
                     print "ATTENDERE PREGO..."
                     print
