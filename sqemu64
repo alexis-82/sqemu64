@@ -6,15 +6,9 @@ import os, sys, subprocess
 import time
 
 class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
+    GREEN = '\033[92m'
     ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
+    
 os.system("clear")
 
 print
@@ -192,8 +186,8 @@ resize()
 def spice():
 	if select == 10:
                 print
-                print bcolors.OKGREEN + "Launch comand line: spicec -h 127.0.0.1 -p port" + bcolors.ENDC
-                print bcolors.OKGREEN + "Exit mouse grab press key Shift+F12" + bcolors.ENDC
+                print bcolors.GREEN + "Launch comand line: spicec -h 127.0.0.1 -p port" + bcolors.ENDC
+                print bcolors.GREEN + "Exit mouse grab press key Shift+F12" + bcolors.ENDC
 		print
                 var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
