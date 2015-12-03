@@ -5,10 +5,6 @@
 import os, sys, subprocess
 import time
 
-class bcolors:
-    GREEN = '\033[92m'
-    ENDC = '\033[0m'
-    
 os.system("clear")
 
 print
@@ -31,6 +27,7 @@ print "[1] Creare disco"
 print "[2] Converti disco in IMG"
 print "[3] Converti disco da IMG a VMDK"
 print "[4] Ridimensiona disco"
+print "[4.5] Clona disco"
 print "[5] Avviare disco"
 print "[6] Avviare dischi multipli"
 print "[7] CD Live"
@@ -61,7 +58,7 @@ print
 
 try:
         select = input(": ")
-        if select >=14:
+        if select >=14.0:
                 print "Opzione non trovata!"
                 raw_input("Premere un tasto per contiuare")
                 os.system("./sqemu64")
@@ -76,12 +73,13 @@ def close():
 		return
 close()
 
+# L'opzione -vnc :5 sta per la porta 590(5), lanciare la connesione con vinagre ip:5905 & oppure (x)vncviewer ip:5905 & 
 def start():
 	if select == 5:
 		var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda %s.img -m %s"%(var3,var1,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda %s.img -m %s "%(var3,var1,var2))
 		os.system("./sqemu64")
 start()
 
@@ -127,7 +125,7 @@ def live():
 	if select == 7:
 		var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Nome CD Iso: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -soundhw all -boot d -cdrom %s.iso -m 1024"%(var1,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -hda %s.img -vga vmware -soundhw all -boot d -cdrom %s.iso -m 1024"%(var1,var2))
 		os.system("./sqemu64")
 live()
 
@@ -162,7 +160,7 @@ def dischi():
 		var2 = raw_input("Nome del disco secondario: ")
 		var3 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var4 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -soundhw all -hda %s.img -hdb %s.img -m %s"%(var4,var1,var2,var3))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -soundhw all -hda %s.img -hdb %s.img -m %s"%(var4,var1,var2,var3))
 		os.system("./sqemu64")
 dischi()
 
@@ -171,7 +169,7 @@ def livemulti():
 		var1 = raw_input("Nome del disco primario: ")
 		var3 = raw_input("Nome del disco secondario: ")
 		var2 = raw_input("Nome CD Iso: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -hdb %s.img -vga std -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var3,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -hda %s.img -hdb %s.img -vga std -soundhw all -boot d -cdrom %s.iso -m 1024"%(var1,var3,var2))
 		os.system("./sqemu64")
 livemulti()
 
@@ -183,21 +181,35 @@ def resize():
 		os.system("./sqemu64")
 resize()
 
+def clone():
+	if select == 4.5:
+		var1 = raw_input("Nome del disco originale: ")
+		var2 = raw_input("Nome della clonazione: ")
+		print
+		print "Attendere prego..."
+		os.system("cp %s.img %s.img"%(var1,var2))
+		print
+		print "Operazione completata!"
+		print
+		time.sleep(2)
+		os.system("./sqemu64")
+clone()
+
 def spice():
 	if select == 10:
                 print
-                print bcolors.GREEN + "Launch comand line: spicec -h 127.0.0.1 -p port" + bcolors.ENDC
-                print bcolors.GREEN + "Exit mouse grab press key Shift+F12" + bcolors.ENDC
+                print bcolors.OKGREEN + "Launch comand line: spicec -h 127.0.0.1 -p port" + bcolors.ENDC
+                print bcolors.OKGREEN + "Exit mouse grab press key Shift+F12" + bcolors.ENDC
 		print
                 var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
                 var4 = input("Port: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -soundhw all -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var4,var1,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -cpu core2duo -smp %s -vga vmware -soundhw all -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var4,var1,var2))
 		os.system("./sqemu64")
 spice()
 
-# L'opzione successivo è valido solo per sistemi operativi minimali, cioè con la sola shell.
+# L'opzione successiva è valido solo per sistemi operativi minimali, cioè con la sola shell.
 # Nominare l'immagine in shell.img
 # Una volta avviata la shell editare il file /etc/default/grub e aggiungere l'opzione per variare la risoluzione:
 # GRUB_GFXMODE=1024x764x32
@@ -207,6 +219,14 @@ def shell():
 	if select == 9:
 		var1 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var2 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda shell.img -m %s"%(var2,var1))
+		usb = raw_input("Avviare con device Usb? ")
+		if usb in ('si', 's'):
+                    print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb"
+                    date1 = input("idVendor= ")
+                    date2 = input("idProduct= ")
+                    os.system("xdotool windowminimize $(xdotool getactivewindow); sudo qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda shell.img -usb -usbdevice host:%d:%d -m %s"%(var2,date1,date2,var1))
+                    os.system("./sqemu64")
+                if usb in ('no', 'n'):
+                    os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda shell.img -m %s"%(var2,var1))
 		os.system("./sqemu64")
 shell()
