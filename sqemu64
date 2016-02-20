@@ -161,7 +161,7 @@ folder()
 
 def plugin():
 	if select == 13:
-		subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install spice-client", shell=True)
+		subprocess.call("apt-get install xdotool && apt-get install dmg2img && apt-get install spice-client", shell=True)
 		print
 		print "Installazione completata!"
 		print
