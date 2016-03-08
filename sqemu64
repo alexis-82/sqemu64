@@ -95,7 +95,7 @@ def disco():
 	if select == 1:
 		var1 = raw_input("Nome del disco da creare: ")
 		var2 = raw_input("Capacità disco: (G=Giga M=Mega es. 8G) ")
-		os.system("qemu-img create %s.img %s"%(var1,var2))
+		os.system("qemu-img create -f qcow2 %s.img %s"%(var1,var2))
 		os.system("./sqemu64")
 disco()
 
