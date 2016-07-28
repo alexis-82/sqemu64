@@ -1,0 +1,24 @@
+# interfaces(5) file used by ifup(8) and ifdown(8)
+auto lo
+iface lo inet loopback
+
+# Configurazione Ethernet
+auto enp0s31f6
+iface enp0s31f6 inet manual
+
+# Configurazione Bridge
+auto br0 
+iface br0 inet static 
+	address 192.168.1.131
+	netmask 255.255.255.0
+	gateway 192.168.1.254
+	dns-nameserver 8.8.8.8
+#  dns-nameservers 85.18.200.200 
+#  dns-nameservers 89.97.140.140
+
+# TUN/TAP
+auto tap0
+iface tap0 inet static
+  address 192.168.1.138
+  netmask 255.255.255.0
+  pre-up tunctl -t tap0
