@@ -4,8 +4,11 @@
 
 import os, sys, subprocess
 import time
+import random
 
 os.system("clear")
+os.system("sudo modprobe kvm")
+os.system("sudo modprobe kvm-intel")
 
 print
 print "  6MMMMb\  6MMMMb/  6MMMMb  `MM 6MMb  6MMb  `MM    MM "
@@ -79,7 +82,8 @@ def start():
 		var1 = raw_input("Nome del disco creato: ")
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:57,model=e1000 -hda %s.img -m %s "%(var3,var1,var2))
+		val1=(random.randrange(10,99))
+		os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu core2duo -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s "%(var3,val1,var1,var2))
 		os.system("./sqemu64")
 start()
 
@@ -130,10 +134,12 @@ def live():
 		  print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb"
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
-		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:57,model=e1000 -soundhw all -usb -usbdevice host:%s:%s -boot d -cdrom %s.iso -m 1024"%(var1,date1,date2,var2))
+		  val1=(random.randrange(10,99))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -usb -usbdevice host:%s:%s -boot d -cdrom %s.iso -m 1024"%(var1,val1,date1,date2,var2))
 		  os.system("./sqemu64")
 		if usb in ('no', 'n'):
-		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:57,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 1024"%(var1,var2))
+		  val1=(random.randrange(10,99))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 1024"%(var1,val1,var2))
 		  os.system("./sqemu64")
 live()
 
@@ -177,7 +183,8 @@ def livemulti():
 		var1 = raw_input("Nome del disco primario: ")
 		var3 = raw_input("Nome del disco secondario: ")
 		var2 = raw_input("Nome CD Iso: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -hdb %s.img -vga std -net tap -net nic,macaddr=52:54:00:12:34:57,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var3,var2))
+		val1=(random.randrange(10,99))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -hda %s.img -hdb %s.img -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var3,val1,var2))
 		os.system("./sqemu64")
 livemulti()
 
@@ -213,7 +220,8 @@ def spice():
 		var2 = raw_input("Quanta RAM? (es. 512M o 2047M) ")
 		var3 = input("Numero di CPU/Core da dedicare: ")
                 var4 = input("Port: ")
-		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:57,model=e1000 -soundhw all -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,var4,var1,var2))
+		val1=(random.randrange(10,99))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,val1,var4,var1,var2))
 		os.system("./sqemu64")
 spice()
 
