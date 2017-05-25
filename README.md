@@ -19,7 +19,7 @@ su apt-get install xdotool
 
 ./sqemu64
 
-**NEW FEATURES**
+**NEW FEATURES:**
 - MAC Address Random for multiple networks
 - Options kvm for high performance of the vm
 - USB connection function
