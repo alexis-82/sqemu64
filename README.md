@@ -6,13 +6,9 @@
 git clone https://github.com/alexis-82/sqemu64.git
 
 
-**INSTALL PLUGIN UBUNTU:**
+**INSTALL PLUGINS:**
 
-sudo apt-get install xdotool
-
-**INSTALL PLUGIN DEBIAN:**
-
-su apt-get install xdotool
+auto install plugins with option number 13
 
 **NEXT STEP:** 
 
