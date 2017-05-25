@@ -22,3 +22,7 @@ su apt-get install xdotool
 **SCREENSHOT**
 
 ![Screenshot](http://funkyimg.com/i/UPy3.png)
+
+**NEW FEATURES**
+- MAC Address Random for multiple networks
+- Options kvm for high performance of the vm
