@@ -5,7 +5,6 @@
 
 git clone https://github.com/alexis-82/sqemu64.git
 
-Change command file manager in line 123
 
 **INSTALL PLUGIN UBUNTU:**
 
