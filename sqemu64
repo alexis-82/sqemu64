@@ -5,14 +5,23 @@
 import os, sys, subprocess
 import time
 import random
+import re
 
 class bcolors:
     OKGREEN = '\033[92m'
     ENDC = '\033[0m'
 
-os.system("clear")
-os.system("sudo modprobe kvm")
-os.system("sudo modprobe kvm-intel")
+log = os.system("grep -om1 sudo $HOME/.bash_history > log")
+check = open("log", "r")
+root = check.read(4 - 0)
+if root == "sudo":
+    os.system("clear")
+    os.system("sudo modprobe kvm")
+    os.system("sudo modprobe kvm-intel")
+else:
+    os.system("clear")
+    os.system("su root -c 'modprobe kvm'")
+    os.system("su root -c 'modprobe kvm-intel'")
 
 print
 print "  6MMMMb\  6MMMMb/  6MMMMb  `MM 6MMb  6MMb  `MM    MM "
@@ -173,10 +182,10 @@ folder()
 def plugin():
 	if select == 13:
 		# Controllo riconoscimento privilegi root
-                path = os.system("grep -om1 sudo $HOME/.bash_history > log")
-                check_file = open("log", "r")
-                read = check_file.read(4 - 0)
-                if check_file == "sudo":
+                log = os.system("grep -om1 sudo $HOME/.bash_history > log")
+                check = open("log", "r")
+                root = check.read(4 - 0)
+                if root == "sudo":
                     subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre", shell=True)
 		    print
 		    print "Installazione completata!"
