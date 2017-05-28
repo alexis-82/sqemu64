@@ -6,6 +6,10 @@ import os, sys, subprocess
 import time
 import random
 
+class bcolors:
+    OKGREEN = '\033[92m'
+    ENDC = '\033[0m'
+
 os.system("clear")
 os.system("sudo modprobe kvm")
 os.system("sudo modprobe kvm-intel")
@@ -168,13 +172,26 @@ folder()
 
 def plugin():
 	if select == 13:
-		subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install spice-client", shell=True)
-		print
-		print "Installazione completata!"
-		print
-		time.sleep(3)
-		restart = raw_input("Premere INVIO per continuare")
-		os.system("./sqemu64")
+		# Controllo riconoscimento privilegi root
+                path = os.system("grep -om1 sudo $HOME/.bash_history > log")
+                check_file = open("log", "r")
+                read = check_file.read(4 - 0)
+                if check_file == "sudo":
+                    subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre", shell=True)
+		    print
+		    print "Installazione completata!"
+		    print
+		    time.sleep(3)
+		    restart = raw_input("Premere INVIO per continuare")
+		    os.system("./sqemu64")
+                else:
+                    subprocess.call("su root -c 'apt-get update' && su root -c 'apt-get install xdotool dmg2img vinagre'", shell=True)
+                    print
+                    print "Installazionne completata!"
+                    print
+                    time.sleep(3)
+                    restart = raw_input("Premere INVIO per continuare")
+                    o.system("./sqemu64")
 plugin()
 
 def dischi():
