@@ -22,6 +22,6 @@ auto install plugins with option number 13
 
 **SCREENSHOT**
 
-![Screenshot](http://funkyimg.com/i/UPy3.png)
+![Screenshot](https://funkyimg.com/i/2WcSN.jpg)
 
 
