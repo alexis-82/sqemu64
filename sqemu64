@@ -13,18 +13,20 @@ class bcolors:
     OKGREEN = '\033[92m'
     ENDC = '\033[0m'
 
-log = os.system("grep -om1 sudo $HOME/.bash_history > log")
-check = open("log", "r")
-root = check.read(4 - 0)
+check_file = os.path.exists("/etc/sudoers")
 
-if root == "sudo":
+#log = os.system("grep -om1 sudo $HOME/.bash_history > log")
+#check = open("log", "r")
+#root = check.read(4 - 0)
+
+if check_file is True:
     os.system("clear")
     print
     print "Attivazione del module KVM"
     print "--------------------------"
     os.system("sudo modprobe kvm")
     os.system("sudo modprobe kvm-intel")
-else:
+if check_file is False:
     os.system("clear")
     print
     print "Attivazione del module KVM"
