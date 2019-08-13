@@ -7,6 +7,8 @@ import time
 import random
 import re
 
+sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
+
 class bcolors:
     OKGREEN = '\033[92m'
     ENDC = '\033[0m'
@@ -14,14 +16,23 @@ class bcolors:
 log = os.system("grep -om1 sudo $HOME/.bash_history > log")
 check = open("log", "r")
 root = check.read(4 - 0)
+
 if root == "sudo":
     os.system("clear")
+    print
+    print "Attivazione del module KVM"
+    print "--------------------------"
     os.system("sudo modprobe kvm")
     os.system("sudo modprobe kvm-intel")
 else:
     os.system("clear")
+    print
+    print "Attivazione del module KVM"
+    print "--------------------------"
     os.system("su root -c 'modprobe kvm'")
     os.system("su root -c 'modprobe kvm-intel'")
+
+os.system("clear")
 
 print
 print "  6MMMMb\  6MMMMb/  6MMMMb  `MM 6MMb  6MMb  `MM    MM "
@@ -101,7 +112,7 @@ def start():
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
 		  val1=(random.randrange(10,99))
-		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s -usb -usbdevice host:%s:%s  "%(var3,val1,var1,var2,date1,date2))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s  -boot menu=on -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s -usb -usbdevice host:%s:%s  "%(var3,val1,var1,var2,date1,date2))
 		  os.system("./sqemu64")
 		if usb in ('no', 'n'):
 		  val1=(random.randrange(10,99))
