@@ -15,8 +15,8 @@ class bcolors:
 
 check_file = os.path.exists("/etc/sudoers")
 
-#log = os.system("grep -om1 sudo $HOME/.bash_history > log")
-#check = open("log", "r")
+#log = os.system("grep -om1 sudo $HOME/.bash_history > id")
+#check = open("id", "r")
 #root = check.read(4 - 0)
 
 if check_file is True:
