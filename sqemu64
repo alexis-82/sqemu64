@@ -7,26 +7,25 @@ import time
 import random
 import re
 
+
 sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
 
 class bcolors:
     OKGREEN = '\033[92m'
     ENDC = '\033[0m'
 
-check_file = os.path.exists("/etc/sudoers")
+log = os.system("grep -om1 sudo $HOME/.bash_history > id")
+check = open("id", "r")
+root = check.read(4 - 0)
 
-#log = os.system("grep -om1 sudo $HOME/.bash_history > id")
-#check = open("id", "r")
-#root = check.read(4 - 0)
-
-if check_file is True:
+if root == "sudo":
     os.system("clear")
     print
     print "Attivazione del module KVM"
     print "--------------------------"
     os.system("sudo modprobe kvm")
     os.system("sudo modprobe kvm-intel")
-if check_file is False:
+else:
     os.system("clear")
     print
     print "Attivazione del module KVM"
@@ -49,8 +48,8 @@ print "                MM            \script qemu/           "
 print "                MM            /code alexis\           "
 print
 
-print "sQemu versione a 64bit"
-print "----------------------"
+print bcolors.OKGREEN + "sQemu versione a 64bit" + bcolors.ENDC
+print bcolors.OKGREEN + "----------------------" + bcolors.ENDC
 print
 print "[1] Creare disco"
 print "[2] Converti disco in IMG"
