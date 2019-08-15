@@ -6,6 +6,7 @@ import os, sys, subprocess
 import time
 import random
 import re
+impot signal
 
 
 sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
@@ -98,6 +99,7 @@ except NameError:
 def close():
 	if select == 0:
 		os.system("clear & exit")
+		#os.kill(os.getppid(), signal.SIGHUP)
 		#return
 close()
 
