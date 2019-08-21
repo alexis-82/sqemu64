@@ -6,10 +6,17 @@ import os, sys, subprocess
 import time
 import random
 import re
-impot signal
+import signal
+import shlex
 
 
-sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
+id_cmd='xdotool getactivewindow'
+resize_cmd='xdotool windowsize --usehints {id} 80 40'
+
+proc=subprocess.Popen(shlex.split(id_cmd),stdout=subprocess.PIPE)
+windowid,err=proc.communicate()
+proc=subprocess.Popen(shlex.split(resize_cmd.format(id=windowid)))
+proc.communicate()
 
 class bcolors:
     OKGREEN = '\033[92m'
