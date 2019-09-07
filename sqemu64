@@ -6,17 +6,9 @@ import os, sys, subprocess
 import time
 import random
 import re
-import signal
-import shlex
 
 
-id_cmd='xdotool getactivewindow'
-resize_cmd='xdotool windowsize --usehints {id} 80 40'
-
-proc=subprocess.Popen(shlex.split(id_cmd),stdout=subprocess.PIPE)
-windowid,err=proc.communicate()
-proc=subprocess.Popen(shlex.split(resize_cmd.format(id=windowid)))
-proc.communicate()
+sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
 
 class bcolors:
     OKGREEN = '\033[92m'
@@ -90,6 +82,13 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
+#    																								   #
+#																										#
+# Virtualizzazione schede video:																#
+# -vga cirrus																						#
+# -vga std																							#
+# -vga qxl																							#
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
 ###############################################################################
 
 try:
@@ -106,7 +105,6 @@ except NameError:
 def close():
 	if select == 0:
 		os.system("clear & exit")
-		#os.kill(os.getppid(), signal.SIGHUP)
 		#return
 close()
 
@@ -122,11 +120,11 @@ def start():
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
 		  val1=(random.randrange(10,99))
-		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s  -boot menu=on -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s -usb -usbdevice host:%s:%s  "%(var3,val1,var1,var2,date1,date2))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s  -boot menu=on -vga cirrus -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s -usb -usbdevice host:%s:%s  "%(var3,val1,var1,var2,date1,date2))
 		  os.system("./sqemu64")
 		if usb in ('no', 'n'):
 		  val1=(random.randrange(10,99))
-		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s "%(var3,val1,var1,var2))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s -boot menu=on -vga cirrus -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s "%(var3,val1,var1,var2))
 		  os.system("./sqemu64")
 start()
 
