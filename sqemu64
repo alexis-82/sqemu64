@@ -82,15 +82,15 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
-#    																								   #
-#																										#
-# Virtualizzazione schede video:																#
-# -vga cirrus																						#
-# -vga std																							#
-# -vga qxl																							#
-# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  							#
-# -vga vmware																						#
-# (apt install open-vm-tools-desktop -- apt install open-vm-tools)				#
+#                                                                             #
+#                                                                             #
+# Virtualizzazione schede video:                                              #
+# -vga cirrus                                                                 #
+# -vga std                                                                    #
+# -vga qxl                                                                    #
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
+# -vga vmware                                                                 #
+# (apt install open-vm-tools-desktop -- apt install open-vm-tools)            #
 ###############################################################################
 
 try:
@@ -178,11 +178,11 @@ def live():
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
 		  val1=(random.randrange(10,99))
-		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -usb -usbdevice host:%s:%s -boot d -cdrom %s.iso -m 2024"%(var1,val1,date1,date2,var2))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -usb -usbdevice host:%s:%s -boot d -cdrom %s.iso -m 2024"%(var1,val1,date1,date2,var2))
 		  os.system("./sqemu64")
 		if usb in ('no', 'n'):
 		  val1=(random.randrange(10,99))
-		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 2024"%(var1,val1,var2))
+		  os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 2024"%(var1,val1,var2))
 		  os.system("./sqemu64")
 live()
 
