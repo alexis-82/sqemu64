@@ -82,7 +82,7 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
-<<<<<<< HEAD
+#								              #
 #                                                                             #
 #                                                                             #
 # Virtualizzazione schede video:                                              #
