@@ -92,7 +92,7 @@ print
 # -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
 # -vga vmware                                                                 #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)            #
-=======
+#									      #
 #    							       		      #
 #									      #
 # Virtualizzazione schede video:					      #
@@ -102,7 +102,7 @@ print
 # -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      #
 # -vga vmware								      #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)	      #
->>>>>>> 12cb92ee37254305aafa69841a4a6ce390c0c379
+#								              #
 ###############################################################################
 
 try:
