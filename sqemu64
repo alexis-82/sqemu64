@@ -14,7 +14,7 @@ class bcolors:
     OKGREEN = '\033[92m'
     ENDC = '\033[0m'
 
-log = os.system("grep -om1 sudo $HOME/.bash_history > id")
+log = os.system("grep -wom1 'sudo' $HOME/.bash_history > id")
 check = open("id", "r")
 root = check.read(4 - 0)
 
@@ -82,7 +82,7 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
-<<<<<<< HEAD
+#																			  #
 #                                                                             #
 #                                                                             #
 # Virtualizzazione schede video:                                              #
@@ -92,17 +92,17 @@ print
 # -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
 # -vga vmware                                                                 #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)            #
-=======
-#    							       		      #
-#									      #
-# Virtualizzazione schede video:					      #
-# -vga cirrus								      #
-# -vga std								      #
-# -vga qxl								      #
-# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      #
-# -vga vmware								      #
-# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	      #
->>>>>>> 12cb92ee37254305aafa69841a4a6ce390c0c379
+#																			  #  
+#    							       		  							      #
+#									   									      #
+# Virtualizzazione schede video:					                          #
+# -vga cirrus								                                  #
+# -vga std								                                      #
+# -vga qxl								                                      #
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		              #
+# -vga vmware								      							  #
+# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	          #
+#																		      #
 ###############################################################################
 
 try:
