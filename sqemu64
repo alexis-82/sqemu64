@@ -82,11 +82,11 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
-<<<<<<< HEAD
 #																			  #
-=======
-#								              #
->>>>>>> 719ca07a49930f002fe52f1b465915c5cf1d9d81
+#																			  #
+#																			  #
+#																              #
+#																			  #
 #                                                                             #
 #                                                                             #
 # Virtualizzazione schede video:                                              #
@@ -96,7 +96,7 @@ print
 # -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
 # -vga vmware                                                                 #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)            #
-<<<<<<< HEAD
+#																			  #
 #																			  #  
 #    							       		  							      #
 #									   									      #
@@ -108,19 +108,19 @@ print
 # -vga vmware								      							  #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)	          #
 #																		      #
-=======
-#									      #
-#    							       		      #
-#									      #
-# Virtualizzazione schede video:					      #
-# -vga cirrus								      #
-# -vga std								      #
-# -vga qxl								      #
-# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      #
-# -vga vmware								      #
-# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	      #
-#								              #
->>>>>>> 719ca07a49930f002fe52f1b465915c5cf1d9d81
+# 																			  #
+# 									      									  #
+#    							       		      							  #
+#									      									  #
+# Virtualizzazione schede video:					      					  #
+# -vga cirrus								      					 		  #
+# -vga std								      								  #
+# -vga qxl								      								  #
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      		  #
+# -vga vmware								      							  #
+# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	          #
+#								              								  #
+#																			  #
 ###############################################################################
 
 try:
@@ -148,7 +148,7 @@ def start():
 		var3 = input("Numero di CPU/Core da dedicare: ")
 		usb = raw_input("Avviare con device Usb? ")
 		if usb in ('si', 's'):
-		  print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb"
+		  print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb | grep idVendor"
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
 		  val1=(random.randrange(10,99))
@@ -204,7 +204,7 @@ def live():
 		var2 = raw_input("Nome CD Iso: ")
 		usb = raw_input("Avviare con device Usb? ")
 		if usb in ('si', 's'):
-		  print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb"
+		  print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb | grep idVendor"
                   date1 = raw_input("idVendor= ")
                   date2 = raw_input("idProduct= ")
 		  val1=(random.randrange(10,99))
@@ -324,7 +324,7 @@ def shell():
 		var2 = input("Numero di CPU/Core da dedicare: ")
 		usb = raw_input("Avviare con device Usb? ")
 		if usb in ('si', 's'):
-                    print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb"
+                    print "Inserire la chiavetta USB e lanciare il comando: dmesg | grep usb | grep idVendor"
                     date1 = input("idVendor= ")
                     date2 = input("idProduct= ")
                     os.system("xdotool windowminimize $(xdotool getactivewindow); sudo qemu-system-x86_64 --enable-kvm -cpu host -smp %s -vga vmware -netdev tap,id=t0,ifname=tap0,script=no,downscript=no -device e1000,netdev=t0,id=nic0 -hda shell.img -usb -usbdevice host:%d:%d -m %s"%(var2,date1,date2,var1))
