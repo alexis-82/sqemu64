@@ -82,11 +82,11 @@ print
 #                                                                             #
 # Attualmente questo programma utilizza come                                  #
 # lanciatore il comando qemu-system-x86_64 per il 64bit                       #
-#																			  #
-#																			  #
-#																			  #
-#																              #
-#																			  #
+#                                                                             #
+#									      #
+#									      #
+#									      #
+#									      #
 #                                                                             #
 #                                                                             #
 # Virtualizzazione schede video:                                              #
@@ -96,31 +96,31 @@ print
 # -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64                      #
 # -vga vmware                                                                 #
 # (apt install open-vm-tools-desktop -- apt install open-vm-tools)            #
-#																			  #
-#																			  #  
-#    							       		  							      #
-#									   									      #
-# Virtualizzazione schede video:					                          #
-# -vga cirrus								                                  #
-# -vga std								                                      #
-# -vga qxl								                                      #
-# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		              #
-# -vga vmware								      							  #
-# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	          #
-#																		      #
-# 																			  #
-# 									      									  #
-#    							       		      							  #
-#									      									  #
-# Virtualizzazione schede video:					      					  #
-# -vga cirrus								      					 		  #
-# -vga std								      								  #
-# -vga qxl								      								  #
-# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      		  #
-# -vga vmware								      							  #
-# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	          #
-#								              								  #
-#																			  #
+#									      #
+#									      #  
+#    							       		      #
+#									      #
+# Virtualizzazione schede video:					      #
+# -vga cirrus								      #
+# -vga std								      #
+# -vga qxl								      #
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      #
+# -vga vmware								      #
+# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	      #
+#									      #
+# 									      #
+# 									      #
+#    							       		      #
+#									      #
+# Virtualizzazione schede video:					      #
+# -vga cirrus								      #
+# -vga std								      #
+# -vga qxl								      #
+# -vga none -device qxl-vga,vgamem_mb=64,vram_size_mb=64  		      #
+# -vga vmware								      #
+# (apt install open-vm-tools-desktop -- apt install open-vm-tools)	      #
+#								              #
+#									      #
 ###############################################################################
 
 try:
