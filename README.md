@@ -22,6 +22,6 @@ auto install plugins with option number 13
 
 **SCREENSHOT**
 
-![Screenshot](https://drive.google.com/file/d/1WwsVXO1foTBTys3Y2LGILzXfr6UyHqD8/view)
+![Screenshot](https://i.postimg.cc/rpdyR328/Istantanea-2022-01-30-22-10-35.png)
 
 
