@@ -3,17 +3,22 @@
 
 **DOWNLOAD COMMAND:** 
 
+```
 git clone https://github.com/alexis-82/sqemu64.git
-
+```
 
 **INSTALL PLUGINS:**
 
+```
 auto install plugins with option number 13
+```
 
 **NEXT STEP:** 
 (user root)
 
+```
 ./sqemu64
+```
 
 **NEW FEATURES:**
 - MAC Address Random for multiple networks
