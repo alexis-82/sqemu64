@@ -7,10 +7,10 @@
 git clone https://github.com/alexis-82/sqemu64.git
 ```
 
-**INSTALL PLUGINS:**
+**INSTALLATION:**
 
 ```
-auto install plugins with option number 13
+auto system installation with option number 13
 ```
 
 **NEXT STEP:** 
@@ -25,6 +25,18 @@ auto install plugins with option number 13
 - Options kvm for high performance of the vm
 - USB connection function
 - Interactive shell for system minimal
+
+**SUPPORT**
+Executive error of interpreter python3 "^M":
+```bash
+apt install dos2unix
+dos2unix sqemu64
+```
+
+System Logs:
+```bash
+./sqemu64 2>&1 | tee -a sqemu64.log
+```
 
 **SCREENSHOT**
 

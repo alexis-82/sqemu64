@@ -5,6 +5,8 @@ import os, sys, subprocess
 import time
 import random
 import re
+import grp
+
 
 
 sys.stdout.write("\x1b[8;{rows};{cols}t".format(rows=40, cols=100))
@@ -66,7 +68,7 @@ print()
 print("[11] Apri Cartella")
 print("[12] Lista sistemi installati")
 print()
-print("[13] Installa Plugins")
+print("[13] Installazione del sistema")
 print()
 print("[0] Uscire")
 print()
@@ -128,11 +130,11 @@ def start():
 			date1 = input("DEV=/dev/")
 			#date2 = raw_input("idProduct= ")
 			val1=(random.randrange(10,99))
-			os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s  -boot menu=on -vga cirrus -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s -usb -usbdevice disk:/dev/%s"%(var3,val1,var1,var2,date1))
+			os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s  -boot menu=on -vga cirrus -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -hda %s.img -m %s -usb -usbdevice disk:/dev/%s"%(var3,val1,var1,var2,date1))
 			os.system("./sqemu64")
 		if usb in ('no', 'n'):
 			val1=(random.randrange(10,99))
-			os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -hda %s.img -m %s "%(var3,val1,var1,var2))
+			os.system("xdotool windowminimize $(xdotool getactivewindow);qemu-system-x86_64 --enable-kvm -cpu host -smp %s -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -hda %s.img -m %s"%(var3,val1,var1,var2))
 			os.system("./sqemu64")
 start()
 
@@ -184,11 +186,11 @@ def live():
 			date1 = input("DEV=/dev/")
 			#date2 = raw_input("idProduct= ")
 			val1=(random.randrange(10,99))
-			os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -usb -usbdevice disk:/dev/%s -boot d -cdrom %s.iso -m 2024"%(var1,val1,date1,var2))
+			os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -usb -usbdevice disk:/dev/%s -boot d -cdrom %s.iso -m 2024"%(var1,val1,date1,var2))
 			os.system("./sqemu64")
 		if usb in ('no', 'n'):
 			val1=(random.randrange(10,99))
-			os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 2024"%(var1,val1,var2))
+			os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp cores=2 -hda %s.img -boot menu=on -vga vmware -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -boot d -cdrom %s.iso -m 2024"%(var1,val1,var2))
 			os.system("./sqemu64")
 live()
 
@@ -206,14 +208,14 @@ def folder():
 		os.system("./sqemu64")
 folder()
 
-def plugin():
+def installation():
 	if select == 13:
 		# Controllo riconoscimento privilegi root
 				log = os.system("grep -om1 sudo $HOME/.bash_history > log")
 				check = open("log", "r")
 				root = check.read(4 - 0)
 				if root == "sudo":
-					subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre", shell=True)
+					subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre && sudo apt-get install qemu-utils && sudo apt-get install qemu-system && sudo apt-get install bridge-utils", shell=True)
 					print()
 					print("Installazione completata!")
 					print()
@@ -221,14 +223,14 @@ def plugin():
 					restart = input("Premere INVIO per continuare")
 					os.system("./sqemu64")
 				else:
-					subprocess.call("su root -c 'apt-get update' && su root -c 'apt-get install xdotool dmg2img vinagre'", shell=True)
+					subprocess.call("su root -c 'apt-get update' && su root -c 'apt-get install xdotool dmg2img vinagre qemu-utils qemu-system bridge-utils'", shell=True)
 					print()
 					print("Installazionne completata!")
 					print()
 					time.sleep(3)
 					restart = input("Premere INVIO per continuare")
 					o.system("./sqemu64")
-plugin()
+installation()
 
 def dischi():
 	if select == 6:
@@ -237,7 +239,7 @@ def dischi():
 		var3 = input("Quanta RAM? (es. 512M o 2047M) ")
 		var4 = eval(input("Numero di CPU/Core da dedicare: "))
 		val1=(random.randrange(10,99))
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp %s -hda %s.img -hdb %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -m %s"%(var4,var1,var2,val1,var3))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -smp %s -hda %s.img -hdb %s.img -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -m %s"%(var4,var1,var2,val1,var3))
 		os.system("./sqemu64")
 dischi()
 
@@ -247,7 +249,7 @@ def livemulti():
 		var3 = input("Nome del disco secondario: ")
 		var2 = input("Nome CD Iso: ")
 		val1=(random.randrange(10,99))
-		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -hda %s.img -hdb %s.img -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -boot d -cdrom %s.iso -m 512"%(var1,var3,val1,var2))
+		os.system("xdotool windowminimize $(xdotool getactivewindow); qemu-system-x86_64 --enable-kvm -cpu host -hda %s.img -hdb %s.img -vga std -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -boot d -cdrom %s.iso -m 512"%(var1,var3,val1,var2))
 		os.system("./sqemu64")
 livemulti()
 
@@ -284,7 +286,7 @@ def spice():
 				var3 = eval(input("Numero di CPU/Core da dedicare: "))
 				var4 = eval(input("Port: "))
 				val1=(random.randrange(10,99))
-				os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -cpu host -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -soundhw all -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,val1,var4,var1,var2))
+				os.system("xdotool windowminimize $(xdotool getactivewindow); kvm --enable-kvm -cpu host -smp %s -vga vmware -net tap -net nic,macaddr=52:54:00:12:34:%d,model=e1000 -audiodev id=sound0,driver=alsa -spice port=%s,addr=127.0.0.1,disable-ticketing -hda %s.img -m %s"%(var3,val1,var4,var1,var2))
 				os.system("./sqemu64")
 spice()
 
