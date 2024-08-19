@@ -10,8 +10,15 @@ git clone https://github.com/alexis-82/sqemu64.git
 **INSTALLATION:**
 
 ```
-auto system installation with option number 13
+Installing dependencies with option number 13
 ```
+
+other with Ansible:
+
+```bash
+ansible-playbook install_packages.yml
+```
+
 
 **NEXT STEP:** 
 (user root)
@@ -26,7 +33,7 @@ auto system installation with option number 13
 - USB connection function
 - Interactive shell for system minimal
 
-**SUPPORT**
+**SUPPORT**  
 Executive error of interpreter python3 "^M":
 ```bash
 apt install dos2unix
