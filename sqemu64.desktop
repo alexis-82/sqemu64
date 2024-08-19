@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=sQemu64
+Comment=Sistema di virtualizzazione KVM con Qemu
+Exec=/percorso/script/./sqemu64
+Icon=/percorso/script/sqemu64.png
+Terminal=true
+Type=Application
