@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  become: yes
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - xdotool
+          - dmg2img
+          - vinagre
+          - qemu-utils
+          - qemu-system
+          - bridge-utils
+        state: present
