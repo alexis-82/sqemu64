@@ -56,7 +56,7 @@ print()
 print("[11] Apri Cartella")
 print("[12] Lista sistemi installati")
 print()
-print("[13] Installazione del sistema")
+print("[13] Installazione delle dipendenze")
 print()
 print("[0] Uscire")
 print()
@@ -198,7 +198,7 @@ folder()
 
 def installation():
     if select == 13:
-        subprocess.call("sudo apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre && sudo apt-get install qemu-utils && sudo apt-get install qemu-system && sudo apt-get install bridge-utils", shell=True)
+        subprocess.call("apt-get install xdotool && sudo apt-get install dmg2img && sudo apt-get install vinagre && sudo apt-get install qemu-utils && sudo apt-get install qemu-system && sudo apt-get install bridge-utils", shell=True)
         print()
         print("Installazione completata!")
         print()
