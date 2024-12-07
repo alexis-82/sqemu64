@@ -47,6 +47,6 @@ System Logs:
 
 **SCREENSHOT**
 
-![Screenshot](https://i.postimg.cc/rpdyR328/Istantanea-2022-01-30-22-10-35.png)
+[![Istantanea-2022-01-30-22-10-35.png](https://i.postimg.cc/rpdyR328/Istantanea-2022-01-30-22-10-35.png)](https://postimg.cc/06s1LtN3)
 
 
