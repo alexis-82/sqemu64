@@ -1,0 +1,151 @@
+name: Packages
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/packages.yml"
+      - "install_os/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NFPM_VERSION: "2.48.0"
+  NFPM_SHA256: "6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750"
+
+jobs:
+  test:
+    name: Test
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the version
+        id: version
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/__init__.py)"
+          test -n "$version"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Il tag $GITHUB_REF_NAME non corrisponde alla versione $version in src/__init__.py"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install nfpm
+        run: |
+          archive="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/${archive}"
+          echo "${NFPM_SHA256}  ${archive}" | sha256sum -c -
+          tar xzf "$archive" nfpm
+          sudo install -m 755 nfpm /usr/local/bin/nfpm
+          rm nfpm "$archive"
+
+      - name: Build packages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir dist
+          for format in deb rpm archlinux apk; do
+            nfpm package --config install_os/nfpm.yaml --packager "$format" --target dist/
+          done
+          cd dist
+          sha256sum -- * > SHA256SUMS
+          ls -l
+
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: dist/
+          if-no-files-found: error
+
+  smoke:
+    name: Install on ${{ matrix.name }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian
+            image: debian:stable
+            install: apt-get update && apt-get install -y --no-install-recommends ./dist/*.deb
+          - name: Ubuntu
+            image: ubuntu:latest
+            install: apt-get update && apt-get install -y --no-install-recommends ./dist/*.deb
+          - name: Fedora
+            image: fedora:latest
+            install: dnf install -y --setopt=install_weak_deps=False ./dist/*.rpm
+          - name: openSUSE
+            image: opensuse/tumbleweed:latest
+            install: zypper --non-interactive install --no-recommends --allow-unsigned-rpm ./dist/*.rpm
+          - name: Arch Linux
+            image: archlinux:latest
+            install: pacman -Syu --noconfirm && pacman -U --noconfirm ./dist/*.pkg.tar.zst
+          - name: Alpine
+            image: alpine:latest
+            install: apk add --no-cache --allow-untrusted ./dist/*.apk
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: dist
+
+      - name: Install the package
+        shell: sh
+        env:
+          INSTALL_COMMAND: ${{ matrix.install }}
+        run: sh -ec "$INSTALL_COMMAND"
+
+      - name: Check the installed program
+        shell: sh
+        env:
+          EXPECTED_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -e
+          test "$(sqemu64 --version)" = "$EXPECTED_VERSION"
+          cd /
+          command -v qemu-system-x86_64
+          command -v qemu-img
+          sqemu64 deps
+          sqemu64 list
+          test -f /usr/share/applications/sqemu64.desktop
+          test -f /usr/share/icons/hicolor/128x128/apps/sqemu64.png
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: dist
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes

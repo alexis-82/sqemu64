@@ -1,0 +1,79 @@
+# Configurazione dei pacchetti. I percorsi "src" sono relativi alla cartella principale del progetto.
+name: sqemu64
+arch: amd64
+platform: linux
+version: ${VERSION}
+version_schema: none
+release: "1"
+section: otherosfs
+priority: optional
+maintainer: alexis-82 <alexis-82@users.noreply.github.com>
+description: Gestione di macchine virtuali QEMU/KVM da terminale, senza root
+homepage: https://github.com/alexis-82/sqemu64
+license: GPL-2.0-only
+
+contents:
+  - src: ./sqemu64
+    dst: /usr/lib/sqemu64/sqemu64
+    file_info:
+      mode: 0755
+  - src: ./src/*.py
+    dst: /usr/lib/sqemu64/src/
+    file_info:
+      mode: 0644
+  - src: /usr/lib/sqemu64/sqemu64
+    dst: /usr/bin/sqemu64
+    type: symlink
+  - src: ./install_os/sqemu64.desktop
+    dst: /usr/share/applications/sqemu64.desktop
+    file_info:
+      mode: 0644
+  - src: ./install_os/sqemu64.png
+    dst: /usr/share/icons/hicolor/128x128/apps/sqemu64.png
+    file_info:
+      mode: 0644
+  - src: ./README.md
+    dst: /usr/share/doc/sqemu64/README.md
+    file_info:
+      mode: 0644
+  - src: ./LICENSE
+    dst: /usr/share/licenses/sqemu64/LICENSE
+    file_info:
+      mode: 0644
+
+overrides:
+  deb:
+    depends:
+      - python3 (>= 3.11)
+      - qemu-system-x86
+      - qemu-utils
+    recommends:
+      - qemu-system-gui
+      - qemu-system-modules-spice
+      - virt-viewer
+  rpm:
+    depends:
+      - python3 >= 3.11
+      - (qemu-system-x86-core or qemu-x86)
+      - (qemu-img or qemu-tools)
+    recommends:
+      - qemu-audio-pipewire
+      - qemu-ui-spice-core
+      - (qemu-device-display-qxl or qemu-hw-display-qxl)
+      - (qemu-char-spice or qemu-chardev-spice)
+      - virt-viewer
+  archlinux:
+    depends:
+      - python>=3.11
+      - qemu-base
+    suggests:
+      - qemu-audio-pipewire
+      - qemu-ui-spice-core
+      - qemu-hw-display-qxl
+      - qemu-chardev-spice
+      - virt-viewer
+  apk:
+    depends:
+      - python3
+      - qemu-system-x86_64
+      - qemu-img
