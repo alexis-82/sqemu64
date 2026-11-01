@@ -12,6 +12,7 @@ REQUIRED = {"qemu-system-x86_64": "avvio delle VM", "qemu-img": "gestione dei di
 OPTIONAL = {
     "lsblk": "selezione delle chiavette USB",
     "iptables": "bridge sul Wi-Fi",
+    "dnsmasq": "indirizzo automatico per le VM sul bridge",
     "remote-viewer": "solo per collegarsi via SPICE",
     "dmg2img": "conversione DMG (in alternativa viene usato qemu-img)",
     "xdg-open": "apertura della cartella",
@@ -20,19 +21,20 @@ OPTIONAL = {
 INSTALLERS = {
     "arch": [
         "pacman", "-S", "--needed", "qemu-base", "qemu-audio-pipewire", "qemu-ui-spice-core",
-        "qemu-hw-display-qxl", "qemu-chardev-spice", "virt-viewer",
+        "qemu-hw-display-qxl", "qemu-chardev-spice", "virt-viewer", "dnsmasq",
     ],
     "debian": [
         "apt-get", "install", "--no-install-recommends", "qemu-system-x86", "qemu-utils",
-        "qemu-system-gui", "qemu-system-modules-spice", "virt-viewer",
+        "qemu-system-gui", "qemu-system-modules-spice", "virt-viewer", "dnsmasq",
     ],
     "fedora": [
         "dnf", "install", "--setopt=install_weak_deps=False", "qemu-system-x86-core", "qemu-img",
         "qemu-audio-pipewire", "qemu-ui-spice-core", "qemu-device-display-qxl", "qemu-char-spice", "virt-viewer",
+        "dnsmasq",
     ],
     "suse": [
         "zypper", "install", "--no-recommends", "qemu-x86", "qemu-tools", "qemu-audio-pipewire",
-        "qemu-ui-spice-core", "qemu-hw-display-qxl", "qemu-chardev-spice", "virt-viewer",
+        "qemu-ui-spice-core", "qemu-hw-display-qxl", "qemu-chardev-spice", "virt-viewer", "dnsmasq",
     ],
 }
 _FAMILIES = {"ubuntu": "debian", "rhel": "fedora", "opensuse": "suse"}

@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, deps, disks, menu, network, usb, validate, vm_manager
+from . import __version__, config, deps, disks, menu, network, usb, validate, vm_manager
 from .validate import SqemuError
 
 
@@ -68,8 +68,12 @@ def build_parser():
     setup = net.add_parser("setup-wifi", help="porta le VM nella LAN dell'host tramite proxy ARP")
     setup.add_argument("bridge")
     setup.add_argument("ip", help="indirizzo della VM nella rete dell'host")
+    setup.add_argument("--vm", help="assegna l'indirizzo a questa VM via DHCP")
     setup.add_argument("--interface", help="connessione da usare (predefinita: quella del gateway)")
     setup.add_argument("--yes", action="store_true", help="non chiede conferma")
+    prepare = net.add_parser("prepare", help="prepara le VM impostate su un bridge, con i loro IP")
+    prepare.add_argument("bridge", nargs="?", help="predefinito: tutti i bridge usati dalle VM")
+    prepare.add_argument("--yes", action="store_true", help="non chiede conferma")
     remove = net.add_parser("remove-wifi", help="annulla solo ciò che ha fatto setup-wifi")
     remove.add_argument("bridge")
     remove.add_argument("--yes", action="store_true", help="non chiede conferma")
@@ -115,15 +119,29 @@ def _run_vm_create(args):
     print(f"VM creata: {vm.name}")
 
 
+def _ask_confirmation():
+    return input("Procedere? (s/N): ").strip().lower() in ("s", "si", "sì", "y", "yes")
+
+
 def _confirm(args):
-    if args.yes:
-        return None
-    return lambda: input("Procedere? (s/N): ").strip().lower() in ("s", "si", "sì", "y", "yes")
+    return None if args.yes else _ask_confirmation
+
+
+def _start(args, name, **options):
+    if not args.dry_run:
+        network.prepare_vm(name, args.network, confirm=_ask_confirmation)
+    vm_manager.start(
+        name, dry_run=args.dry_run, ram=args.ram, cpus=args.cpus, usb_device=args.usb,
+        display=args.display, network=args.network, **options,
+    )
 
 
 def _run_network(args):
     if args.network_command == "setup-wifi":
-        network.setup_wifi(args.bridge, args.ip, args.interface, confirm=_confirm(args))
+        vm = config.load(args.vm) if args.vm else None
+        network.setup_wifi(args.bridge, args.ip, args.interface, confirm=_confirm(args), vm=vm)
+    elif args.network_command == "prepare":
+        network.prepare_all(args.bridge, confirm=_confirm(args))
     else:
         network.remove_wifi(args.bridge, confirm=_confirm(args))
 
@@ -155,16 +173,9 @@ def dispatch(args):
     elif command == "network":
         _run_network(args)
     elif command == "start":
-        vm_manager.start(
-            args.name, dry_run=args.dry_run, ram=args.ram, cpus=args.cpus, iso=args.iso,
-            disk_values=args.disk, usb_device=args.usb, spice_port=args.spice, display=args.display,
-            network=args.network,
-        )
+        _start(args, args.name, iso=args.iso, disk_values=args.disk, spice_port=args.spice)
     elif command == "shell":
-        vm_manager.start(
-            "shell", dry_run=args.dry_run, ram=args.ram, cpus=args.cpus,
-            usb_device=args.usb, display=args.display, network=args.network,
-        )
+        _start(args, "shell")
 
 
 def main(argv=None):

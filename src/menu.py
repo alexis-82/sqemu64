@@ -135,7 +135,8 @@ def _choose_network(name):
     bridges, taps = vm_manager.list_interfaces()
     found = bridges if selected == "bridge" else taps
     print(f"Disponibili: {', '.join(found) if found else '(nessuna)'}")
-    proposal = saved_interface if kind == selected else (found[0] if found else None)
+    fallback = "br0" if selected == "bridge" else None
+    proposal = saved_interface if kind == selected else (found[0] if found else fallback)
     interface = _required("Nome dell'interfaccia", proposal)
     vm_manager.save_network(name, f"{selected}:{interface}")
 
@@ -187,12 +188,17 @@ def _clone_disk():
     print("Copia creata:", disks.clone(source, target))
 
 
+def _start(name, **options):
+    network.prepare_vm(name, confirm=lambda: _yes("Procedere?"))
+    vm_manager.start(name, **options)
+
+
 def _start_disk():
     name = _ask_vm()
     options = _ask_overrides()
     usb_device = _ask_usb()
     _choose_devices(name)
-    vm_manager.start(name, **options, usb_device=usb_device)
+    _start(name, **options, usb_device=usb_device)
 
 
 def _start_multiple():
@@ -200,7 +206,7 @@ def _start_multiple():
     options = _ask_overrides()
     disk_values = _ask_extra_disks()
     _choose_devices(name)
-    vm_manager.start(name, **options, disk_values=disk_values)
+    _start(name, **options, disk_values=disk_values)
 
 
 def _live():
@@ -209,7 +215,7 @@ def _live():
     options = _ask_overrides()
     usb_device = _ask_usb()
     _choose_devices(name, live=True)
-    vm_manager.start(name, **options, iso=iso, usb_device=usb_device)
+    _start(name, **options, iso=iso, usb_device=usb_device)
 
 
 def _live_multiple():
@@ -218,7 +224,7 @@ def _live_multiple():
     iso = _required("Percorso dell'immagine ISO")
     options = _ask_overrides()
     _choose_devices(name, live=True)
-    vm_manager.start(name, **options, iso=iso, disk_values=disk_values)
+    _start(name, **options, iso=iso, disk_values=disk_values)
 
 
 def _shell():
@@ -227,7 +233,7 @@ def _shell():
     options = _ask_overrides()
     usb_device = _ask_usb()
     _choose_devices("shell")
-    vm_manager.start("shell", **options, usb_device=usb_device)
+    _start("shell", **options, usb_device=usb_device)
 
 
 def _wifi_bridge():

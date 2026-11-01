@@ -104,35 +104,47 @@ una nuova VM, mentre `sqemu64 start --network` vale solo per quell'avvio.
 ### Bridge con il Wi-Fi
 
 Una scheda Wi-Fi di solito non può entrare in un bridge, ma la VM può comunque avere un
-indirizzo nella stessa rete del computer, con accesso a Internet e alla LAN:
+indirizzo nella stessa rete del computer, con accesso a Internet e alla LAN. Basta scegliere
+`2 = bridge` nel menu, oppure:
 
 ```bash
-sqemu64 network setup-wifi br0 192.168.1.50   # oppure opzione 13 del menu
 sqemu64 vm create nome --size 40G --network bridge:br0
-sqemu64 network remove-wifi br0               # annulla solo ciò che ha fatto setup-wifi
+sqemu64 start nome
 ```
 
-Il comando mostra le operazioni, chiede conferma e usa `sudo` solo per queste. Sceglie la
-connessione del gateway, altrimenti puoi indicarla con `--interface`. Usa il proxy ARP: il
-computer risponde sulla LAN al posto della VM.
+Se il bridge non è pronto, sQemu64 propone un IP libero, mostra le operazioni, chiede
+conferma e usa `sudo` solo per queste. La VM riceve IP, gateway e DNS via DHCP, quindi nel
+sistema ospite non serve configurare nulla, e mantiene lo stesso IP ai prossimi avvii.
+Funziona con il proxy ARP: il computer risponde sulla LAN al posto della VM.
 
-- Nel sistema ospite imposta un **indirizzo statico**, con il router come gateway e DNS. Il
-  DHCP non funziona. Il gateway è necessario anche per comunicare con il computer host.
-- Con NetworkManager, per esempio su Debian con desktop, usa `nmcli`: un indirizzo aggiunto
-  con `ip addr` può sparire quando il DHCP fallisce.
+```bash
+sqemu64 network prepare                                 # prepara tutte le VM su bridge
+sqemu64 network setup-wifi br0 192.168.1.50 --vm nome   # sceglie l'IP, oppure opzione 13
+sqemu64 network remove-wifi br0                         # annulla solo ciò che ha fatto sQemu64
+```
 
-  ```bash
-  sudo nmcli con add type ethernet ifname ens3 con-name lan ipv4.method manual \
-    ipv4.addresses 192.168.1.50/24 ipv4.gateway 192.168.1.1 ipv4.dns 192.168.1.1 \
-    connection.autoconnect-priority 10
-  sudo nmcli con up lan
-  ```
-- Scegli un IP libero, fuori dall'intervallo che il router assegna via DHCP.
-- Ogni VM ha il suo IP: rilancia il comando per ognuna, sullo stesso bridge.
-- Tutto dura fino al riavvio, tranne l'autorizzazione in `bridge.conf`: dopo un riavvio
-  rilancia il comando.
+Per cambiare l'IP di una VM, rilancia `setup-wifi` con il nuovo indirizzo, a VM spenta:
+
+```bash
+sqemu64 network setup-wifi br0 192.168.1.60 --vm nome
+```
+
+Il vecchio indirizzo viene liberato, e la VM riceve quello nuovo al prossimo avvio, che resta
+associato a lei anche dopo un riavvio del computer.
+
+Dopo un riavvio, `./bridge.sh [BRIDGE]` esegue `network prepare` senza chiedere conferma: ogni
+VM mantiene il suo IP, e quelle già pronte o accese non vengono toccate.
+
+- Tieni l'IP fuori dall'intervallo che il router assegna via DHCP: il controllo con il ping
+  non vede i dispositivi spenti.
+- Tutto dura fino al riavvio del computer, tranne l'autorizzazione in `bridge.conf`: al
+  prossimo avvio della VM sQemu64 propone di ripreparare il bridge, con lo stesso IP.
 - Il broadcast non attraversa il computer, quindi la ricerca automatica di dispositivi in
   rete può non funzionare.
+- I bridge creati in altro modo, per esempio da libvirt, non vengono toccati.
+- Senza `--vm`, `setup-wifi` non assegna l'indirizzo via DHCP: va impostato nel sistema
+  ospite, con il router come gateway e DNS. Con NetworkManager usa `nmcli`, perché un
+  indirizzo aggiunto con `ip addr` può sparire.
 
 ### Bridge con il cavo o isolato
 

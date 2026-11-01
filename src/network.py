@@ -3,6 +3,9 @@
 Una scheda Wi-Fi di solito non può entrare in un bridge, perché la rete accetta solo il suo
 MAC. Con il proxy ARP l'host risponde sulla LAN al posto della VM e le inoltra il traffico.
 
+Un piccolo dnsmasq sul bridge assegna a ogni VM il suo IP, associato al MAC, insieme a gateway
+e DNS, così nel sistema ospite non serve configurare nulla.
+
 plan() calcola i comandi senza eseguirli. Ogni passo eseguito salva il comando che lo annulla,
 così remove_wifi() disfa solo ciò che è stato davvero cambiato.
 """
@@ -12,13 +15,16 @@ import json
 import os
 import shlex
 import shutil
+import time
 from dataclasses import dataclass, field
 
 from . import config, runner, validate, vm_manager
 from .validate import SqemuError
 
 BRIDGE_NETWORKS = ("192.168.77.1/24", "192.168.78.1/24", "10.77.77.1/24", "172.31.77.1/24")
-_UNDO_TOOLS = ("ip", "sysctl", "iptables", "sed")
+_UNDO_TOOLS = ("ip", "sysctl", "iptables", "sed", "pkill")
+_SYSTEM_PATHS = ("/usr/sbin", "/sbin")  # su Debian non sono nel PATH degli utenti normali
+_FIRST_PROPOSED_HOST = 50
 
 
 @dataclass
@@ -41,6 +47,7 @@ class Host:
     forward: int = 0
     proxy_arp: dict = field(default_factory=dict)
     route_exists: bool = False
+    dnsmasq_running: bool = False
 
 
 def _sudo(*argv):
@@ -73,7 +80,46 @@ def _free_bridge_network(host):
     raise SqemuError("Non trovo una rete privata libera per il bridge.")
 
 
-def plan(bridge, ip, host):
+def _pid_file(bridge):
+    return f"/run/sqemu64-dnsmasq-{bridge}.pid"
+
+
+def dnsmasq_argv(bridge, host, dhcp_hosts):
+    """Solo DHCP (port=0 disattiva il DNS) e solo per i MAC delle VM indicate."""
+    network = host.address.network
+    argv = [
+        "dnsmasq",
+        "--conf-file=/dev/null",
+        "--no-resolv",
+        "--no-hosts",
+        "--port=0",
+        f"--interface={bridge}",
+        "--bind-interfaces",
+        "--except-interface=lo",
+        f"--shared-network={bridge},{network.network_address}",
+        "--dhcp-authoritative",
+        f"--dhcp-range={network.network_address},static,{network.netmask}",
+        f"--dhcp-option=3,{host.gateway}",
+        f"--dhcp-option=6,{host.gateway}",
+        f"--pid-file={_pid_file(bridge)}",
+        f"--dhcp-leasefile=/run/sqemu64-dnsmasq-{bridge}.leases",
+    ]
+    argv += [f"--dhcp-host={mac},{ip},infinite" for mac, ip in sorted(dhcp_hosts.items())]
+    return _sudo(*argv)
+
+
+def _dhcp_steps(bridge, host, dhcp_hosts, restart):
+    rule = ("INPUT", "-i", bridge, "-p", "udp", "--dport", "67", "-j", "ACCEPT")
+    steps = [Step(_sudo("iptables", "-I", *rule), _sudo("iptables", "-D", *rule), check=_sudo("iptables", "-C", *rule))]
+    stop = _sudo("pkill", "-F", _pid_file(bridge))
+    if host.dnsmasq_running and restart:
+        steps.append(Step(stop))
+    if not host.dnsmasq_running or restart:
+        steps.append(Step(dnsmasq_argv(bridge, host, dhcp_hosts), stop))
+    return steps
+
+
+def plan(bridge, ip, host, dhcp_hosts=None, restart_dhcp=False):
     """Restituisce i passi necessari: ciò che è già a posto non viene toccato."""
     steps = []
     if not host.bridge_exists:
@@ -116,6 +162,8 @@ def plan(bridge, ip, host):
             _sudo("iptables", "-D", *rule),
             check=_sudo("iptables", "-C", *rule),
         ))
+    if dhcp_hosts:
+        steps += _dhcp_steps(bridge, host, dhcp_hosts, restart_dhcp)
     return steps
 
 
@@ -184,7 +232,23 @@ def gather(bridge, uplink=None):
         proxy_arp={
             name: _read_int(f"/proc/sys/net/ipv4/conf/{name}/proxy_arp") for name in (uplink, bridge)
         },
+        dnsmasq_running=_dnsmasq_running(bridge),
     )
+
+
+def _dnsmasq_running(bridge):
+    try:
+        with open(_pid_file(bridge), encoding="ascii") as file:
+            pid = int(file.read().strip())
+        with open(f"/proc/{pid}/comm", encoding="ascii") as file:
+            return file.read().strip() == "dnsmasq"
+    except (OSError, ValueError):
+        return False
+
+
+def _tool_exists(tool):
+    path = os.pathsep.join([os.environ.get("PATH", ""), *_SYSTEM_PATHS])
+    return shutil.which(tool, path=path) is not None
 
 
 def _route_exists(ip, bridge):
@@ -210,9 +274,11 @@ def _load_state(bridge):
     try:
         state = json.loads(_state_path(bridge).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return {"bridge": bridge, "ips": [], "undo": []}
+        return {"bridge": bridge, "ips": [], "undo": [], "hosts": {}, "dhcp_hosts": {}}
     except (OSError, json.JSONDecodeError) as error:
         raise SqemuError(f"Stato della rete non valido: {error}") from None
+    state.setdefault("hosts", {})
+    state.setdefault("dhcp_hosts", {})
     return state
 
 
@@ -237,13 +303,18 @@ def _describe(steps):
         print(f"  {line}")
 
 
-def setup_wifi(bridge, ip_value, uplink=None, confirm=None):
-    """Prepara il bridge e fa comparire la VM nella rete dell'host con l'IP indicato."""
+def setup_wifi(bridge, ip_value, uplink=None, confirm=None, vm=None):
+    """Prepara il bridge e fa comparire nella rete dell'host l'IP indicato.
+
+    Con una VM, il suo MAC riceve quell'IP via DHCP; senza, l'IP va impostato nel sistema ospite.
+    """
     validate.interface(bridge)
     if uplink:
         validate.interface(uplink)
-    if shutil.which("iptables") is None:
+    if not _tool_exists("iptables"):
         raise SqemuError("Il comando iptables non è disponibile.")
+    if vm and not _tool_exists("dnsmasq"):
+        raise SqemuError("Il comando dnsmasq non è disponibile: installalo con sqemu64 deps --install.")
 
     host = gather(bridge, uplink)
     ip = parse_guest_ip(ip_value, host)
@@ -253,7 +324,26 @@ def setup_wifi(bridge, ip_value, uplink=None, confirm=None):
     if not host.route_exists and _address_in_use(ip):
         raise SqemuError(f"{ip} risponde già in rete: scegli un altro indirizzo.")
 
-    steps = plan(bridge, ip, host)
+    state = _load_state(bridge)
+    dhcp_hosts = dict(state["dhcp_hosts"])
+    for name, assigned in state["hosts"].items():
+        if assigned["ip"] == str(ip) and (vm is None or name != vm.name):
+            raise SqemuError(f"{ip} è già assegnato alla VM {name}.")
+    old_ip = None
+    if vm:
+        previous = state["hosts"].get(vm.name)
+        if previous and previous["mac"] != vm.mac:
+            dhcp_hosts.pop(previous["mac"], None)
+        if previous and previous["ip"] != str(ip):
+            old_ip = previous["ip"]
+        dhcp_hosts[vm.mac] = str(ip)
+
+    restart_dhcp = bool(vm) and dhcp_hosts != state["dhcp_hosts"]
+    steps = plan(bridge, ip, host, dhcp_hosts if vm or host.dnsmasq_running else None, restart_dhcp)
+    old_route = _sudo("ip", "route", "del", f"{old_ip}/32", "dev", bridge) if old_ip else None
+    if old_ip and _route_exists(old_ip, bridge):
+        # Altrimenti il computer continuerebbe a rispondere sulla LAN per il vecchio indirizzo.
+        steps.insert(0, Step(old_route))
     print(f"Connessione: {host.uplink} ({host.address}), router {host.gateway}")
     print("Comandi da eseguire:")
     _describe(steps)
@@ -263,7 +353,6 @@ def setup_wifi(bridge, ip_value, uplink=None, confirm=None):
         return False
 
     _require_sudo()
-    state = _load_state(bridge)
     for step in steps:
         if step.check and runner.quiet(step.check) == 0:
             continue
@@ -271,20 +360,114 @@ def setup_wifi(bridge, ip_value, uplink=None, confirm=None):
             runner.run(step.argv, stdin_text=step.stdin)
         except SqemuError as error:
             raise SqemuError(f"{error}\nPer annullare i passi già eseguiti: sqemu64 network remove-wifi {bridge}") from None
+        if step.argv[1] == "pkill":
+            time.sleep(0.5)  # la porta DHCP deve liberarsi prima del nuovo avvio
         if step.undo and step.undo not in state["undo"]:
             state["undo"].append(step.undo)
             _save_state(bridge, state)
     if str(ip) not in state["ips"]:
         state["ips"].append(str(ip))
+    if old_ip:
+        state["ips"] = [item for item in state["ips"] if item != old_ip]
+        state["undo"] = [argv for argv in state["undo"] if argv != old_route]
+    if vm:
+        state["hosts"][vm.name] = {"mac": vm.mac, "ip": str(ip)}
+        state["dhcp_hosts"] = dhcp_hosts
     _save_state(bridge, state)
 
-    print(f"\nBridge {bridge} pronto. Per collegare una VM usa la rete bridge:{bridge}.")
-    print("Nel sistema ospite imposta un indirizzo statico:")
+    print(f"\nBridge {bridge} pronto.")
+    if vm:
+        print(f"La VM {vm.name} riceverà {ip} via DHCP: nel sistema ospite non serve configurare nulla.")
+        return True
+    print(f"Per collegare una VM usa la rete bridge:{bridge} e imposta nel sistema ospite un indirizzo statico:")
     print(f"  IP       {ip}/{host.address.network.prefixlen}")
     print(f"  Gateway  {host.gateway}")
     print(f"  DNS      {host.gateway}")
-    print("Il DHCP non funziona con questa configurazione.")
     return True
+
+
+def _is_managed(bridge):
+    """Un bridge creato da altri (libvirt, NetworkManager, a mano) non viene toccato."""
+    return _state_path(bridge).exists() or not os.path.exists(f"{vm_manager.SYS_NET}/{bridge}")
+
+
+def is_ready(bridge, vm):
+    """Controlla ciò che sparisce al riavvio, senza sudo: le regole iptables spariscono con il resto."""
+    assigned = _load_state(bridge)["hosts"].get(vm.name)
+    if not assigned or assigned["mac"] != vm.mac:
+        return False
+    if not os.path.isdir(f"{vm_manager.SYS_NET}/{bridge}/bridge"):
+        return False
+    return (
+        _route_exists(assigned["ip"], bridge)
+        and _dnsmasq_running(bridge)
+        and _read_int("/proc/sys/net/ipv4/ip_forward") == 1
+        and _read_int(f"/proc/sys/net/ipv4/conf/{bridge}/proxy_arp") == 1
+    )
+
+
+def propose_ip(bridge, vm, host):
+    """Riusa l'IP della VM se è libero, altrimenti cerca il primo libero da .50 in poi."""
+    state = _load_state(bridge)
+    previous = state["hosts"].get(vm.name)
+    if previous and not _route_elsewhere(previous["ip"], bridge):
+        if _route_exists(previous["ip"], bridge) or not _address_in_use(previous["ip"]):
+            return previous["ip"]
+
+    taken = {assigned["ip"] for assigned in state["hosts"].values()} | set(state["ips"])
+    taken |= {str(host.address.ip), str(host.gateway)}
+    candidates = list(host.address.network.hosts())
+    if len(candidates) > _FIRST_PROPOSED_HOST:
+        candidates = candidates[_FIRST_PROPOSED_HOST - 1:]
+    for candidate in candidates:
+        if str(candidate) in taken or _route_elsewhere(candidate, bridge):
+            continue
+        if not _address_in_use(candidate):
+            return str(candidate)
+    raise SqemuError(f"Non trovo un indirizzo libero nella rete {host.address.network}.")
+
+
+def prepare_vm(name, network_value=None, confirm=None):
+    """Prima dell'avvio: se il bridge della VM non è pronto, propone di prepararlo."""
+    vm = config.load(name)
+    value = validate.network(network_value or vm.network)
+    if not value.startswith("bridge:"):
+        return
+    bridge = value.removeprefix("bridge:")
+    if not _is_managed(bridge) or is_ready(bridge, vm):
+        return
+
+    host = gather(bridge)
+    ip = propose_ip(bridge, vm, host)
+    print(f"Il bridge {bridge} non è pronto. IP proposto per la VM {name}: {ip}")
+    print("Controlla che sia fuori dall'intervallo che il router assegna via DHCP.")
+    if not setup_wifi(bridge, ip, confirm=confirm, vm=vm):
+        raise SqemuError(f"Avvio annullato: il bridge {bridge} non è pronto.")
+
+
+def prepare_all(bridge=None, confirm=None):
+    """Prepara tutte le VM impostate su un bridge, oppure su tutti i bridge se non è indicato."""
+    if bridge:
+        validate.interface(bridge)
+    found = False
+    for name in config.list_names():
+        vm = config.load(name)
+        if not vm.network.startswith("bridge:"):
+            continue
+        vm_bridge = vm.network.removeprefix("bridge:")
+        if bridge and vm_bridge != bridge:
+            continue
+        found = True
+        if not _is_managed(vm_bridge):
+            print(f"{name}: il bridge {vm_bridge} non è gestito da sQemu64, lo lascio com'è.")
+        elif is_ready(vm_bridge, vm):
+            ip = _load_state(vm_bridge)["hosts"][name]["ip"]
+            print(f"{name}: già pronta su {vm_bridge} con IP {ip}.")
+        else:
+            prepare_vm(name, confirm=confirm)
+    if not found:
+        target = f"sul bridge {bridge}" if bridge else "su un bridge"
+        raise SqemuError(f"Nessuna VM impostata {target}.")
 
 
 def _check_undo(argv):

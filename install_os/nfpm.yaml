@@ -51,6 +51,7 @@ overrides:
       - qemu-system-gui
       - qemu-system-modules-spice
       - virt-viewer
+      - dnsmasq
   rpm:
     depends:
       - python3 >= 3.11
@@ -62,6 +63,7 @@ overrides:
       - (qemu-device-display-qxl or qemu-hw-display-qxl)
       - (qemu-char-spice or qemu-chardev-spice)
       - virt-viewer
+      - dnsmasq
   archlinux:
     depends:
       - python>=3.11
@@ -72,6 +74,7 @@ overrides:
       - qemu-hw-display-qxl
       - qemu-chardev-spice
       - virt-viewer
+      - dnsmasq
   apk:
     depends:
       - python3

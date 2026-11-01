@@ -457,7 +457,7 @@ class MenuTests(TempData):
 
     def _network_answers(self, *answers, screen=("2",)):
         config.save(make_vm())
-        with mock.patch("src.vm_manager.start") as start, mock.patch(
+        with mock.patch("src.vm_manager.start") as start, mock.patch("src.network.prepare_vm"), mock.patch(
             "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], ["tap0"])
         ):
             output = self._run("5", "debian", "", "", "n", *answers, *screen)
@@ -468,7 +468,7 @@ class MenuTests(TempData):
         start.assert_called_once()
         self.assertIn("br0, virbr0", output)
         self.assertEqual(config.load("debian").network, "bridge:br0")
-        with mock.patch("src.vm_manager.start"), mock.patch(
+        with mock.patch("src.vm_manager.start"), mock.patch("src.network.prepare_vm"), mock.patch(
             "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], [])
         ):
             self._run("5", "debian", "", "", "n", "", "", "2")
@@ -662,7 +662,9 @@ class WifiBridgeRunTests(TempData):
             ("src.network._route_elsewhere", lambda ip, bridge: False),
             ("src.network._route_exists", lambda ip, bridge: False),
             ("src.network._address_in_use", lambda ip: False),
-            ("src.network.shutil.which", lambda tool: f"/usr/bin/{tool}"),
+            ("src.network._tool_exists", lambda tool: True),
+            ("src.network._dnsmasq_running", lambda bridge: False),
+            ("src.network.time.sleep", lambda seconds: None),
             ("src.network.runner.quiet_interactive", lambda argv: 0),
             ("src.network.runner.run", lambda argv, stdin_text=None: self.executed.append(argv)),
             ("src.network.runner.quiet", self._quiet),
@@ -752,6 +754,247 @@ class WifiBridgeRunTests(TempData):
         for bad in ("br0;id", "a" * 16):
             with self.assertRaises(SqemuError, msg=bad):
                 network.setup_wifi(bad, self.IP)
+
+
+class WifiBridgeDhcpPlanTests(unittest.TestCase):
+    IP = ipaddress.IPv4Address("192.168.1.50")
+    HOSTS = {"52:54:00:aa:bb:cc": "192.168.1.50"}
+
+    def test_dnsmasq_serves_only_the_vm_and_no_dns(self):
+        argv = network.dnsmasq_argv("br0", make_host(), self.HOSTS)
+        self.assertEqual(argv[:2], ["sudo", "dnsmasq"])
+        for expected in (
+            "--port=0",
+            "--interface=br0",
+            "--bind-interfaces",
+            "--shared-network=br0,192.168.1.0",
+            "--dhcp-range=192.168.1.0,static,255.255.255.0",
+            "--dhcp-option=3,192.168.1.1",
+            "--dhcp-option=6,192.168.1.1",
+            "--dhcp-host=52:54:00:aa:bb:cc,192.168.1.50,infinite",
+        ):
+            self.assertIn(expected, argv)
+
+    def test_plan_opens_the_dhcp_port_and_starts_dnsmasq(self):
+        steps = network.plan("br0", self.IP, make_host(), self.HOSTS)
+        text = commands_of(steps)
+        self.assertIn("sudo iptables -I INPUT -i br0 -p udp --dport 67 -j ACCEPT", text)
+        start = next(step for step in steps if step.argv[1] == "dnsmasq")
+        self.assertEqual(start.undo, ["sudo", "pkill", "-F", "/run/sqemu64-dnsmasq-br0.pid"])
+
+    def test_running_dnsmasq_is_kept_or_restarted_only_when_needed(self):
+        running = make_host(dnsmasq_running=True)
+        self.assertFalse([s for s in network.plan("br0", self.IP, running, self.HOSTS) if s.argv[1] in ("dnsmasq", "pkill")])
+        tools = [s.argv[1] for s in network.plan("br0", self.IP, running, self.HOSTS, restart_dhcp=True)]
+        self.assertLess(tools.index("pkill"), tools.index("dnsmasq"))
+
+    def test_no_vm_means_no_dhcp(self):
+        tools = [s.argv[1] for s in network.plan("br0", self.IP, make_host())]
+        self.assertNotIn("dnsmasq", tools)
+
+
+class WifiBridgeVmTests(TempData):
+    def setUp(self):
+        super().setUp()
+        self.vm = make_vm(network="bridge:br0")
+        config.save(self.vm)
+        self.running = False
+        self.executed = []
+        self.in_use = set()
+        self.routes = set()
+        for target, replacement in (
+            ("src.network.gather", lambda bridge, uplink=None: make_host(dnsmasq_running=self.running)),
+            ("src.network._route_elsewhere", lambda ip, bridge: False),
+            ("src.network._route_exists", lambda ip, bridge: str(ip) in self.routes),
+            ("src.network._address_in_use", lambda ip: str(ip) in self.in_use),
+            ("src.network._tool_exists", lambda tool: True),
+            ("src.network._dnsmasq_running", lambda bridge: self.running),
+            ("src.network.time.sleep", lambda seconds: None),
+            ("src.network.runner.quiet_interactive", lambda argv: 0),
+            ("src.network.runner.run", self._run_step),
+            ("src.network.runner.quiet", lambda argv: 1),
+        ):
+            patcher = mock.patch(target, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _run_step(self, argv, stdin_text=None):
+        self.executed.append(argv)
+        if argv[1] == "dnsmasq":
+            self.running = True
+
+    def _quiet_setup(self, ip="192.168.1.50", vm=None):
+        with mock.patch("builtins.print"):
+            return network.setup_wifi("br0", ip, vm=vm or self.vm)
+
+    def test_setup_with_a_vm_starts_dhcp_and_remembers_it(self):
+        self._quiet_setup()
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertEqual(state["hosts"]["debian"], {"mac": self.vm.mac, "ip": "192.168.1.50"})
+        self.assertEqual(state["dhcp_hosts"], {self.vm.mac: "192.168.1.50"})
+        self.assertIn(["sudo", "pkill", "-F", "/run/sqemu64-dnsmasq-br0.pid"], state["undo"])
+
+    def test_same_vm_again_does_not_restart_dhcp(self):
+        self._quiet_setup()
+        self.executed.clear()
+        self._quiet_setup()
+        self.assertFalse([argv for argv in self.executed if argv[1] in ("dnsmasq", "pkill")])
+
+    def test_second_vm_restarts_dhcp_with_both_hosts(self):
+        self._quiet_setup()
+        self.executed.clear()
+        other = make_vm(name="altra", mac="52:54:00:00:00:02", network="bridge:br0")
+        self._quiet_setup("192.168.1.51", other)
+        start = next(argv for argv in self.executed if argv[1] == "dnsmasq")
+        self.assertIn(f"--dhcp-host={self.vm.mac},192.168.1.50,infinite", start)
+        self.assertIn("--dhcp-host=52:54:00:00:00:02,192.168.1.51,infinite", start)
+        self.assertIn("pkill", [argv[1] for argv in self.executed])
+
+    def test_changing_the_ip_releases_the_old_address(self):
+        """Regressione: la vecchia route faceva rispondere il computer per un IP non più usato."""
+        self._quiet_setup("192.168.1.50")
+        self.routes = {"192.168.1.50"}
+        self.executed.clear()
+        self._quiet_setup("192.168.1.60")
+
+        self.assertIn(["sudo", "ip", "route", "del", "192.168.1.50/32", "dev", "br0"], self.executed)
+        self.assertIn(["sudo", "ip", "route", "add", "192.168.1.60/32", "dev", "br0"], self.executed)
+        start = next(argv for argv in self.executed if argv[1] == "dnsmasq")
+        self.assertIn(f"--dhcp-host={self.vm.mac},192.168.1.60,infinite", start)
+        self.assertNotIn(f"--dhcp-host={self.vm.mac},192.168.1.50,infinite", start)
+
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertEqual(state["ips"], ["192.168.1.60"])
+        self.assertEqual(state["hosts"]["debian"]["ip"], "192.168.1.60")
+        routes = [argv for argv in state["undo"] if "route" in argv]
+        self.assertEqual(routes, [["sudo", "ip", "route", "del", "192.168.1.60/32", "dev", "br0"]])
+
+    def test_an_ip_of_another_vm_is_refused(self):
+        self._quiet_setup()
+        other = make_vm(name="altra", mac="52:54:00:00:00:02")
+        with self.assertRaisesRegex(SqemuError, "già assegnato alla VM debian"):
+            self._quiet_setup(vm=other)
+
+    def test_proposal_starts_at_fifty_and_skips_addresses_in_use(self):
+        host = make_host()
+        self.assertEqual(network.propose_ip("br0", self.vm, host), "192.168.1.50")
+        self.in_use = {"192.168.1.50", "192.168.1.51"}
+        self.assertEqual(network.propose_ip("br0", self.vm, host), "192.168.1.52")
+
+    def test_proposal_reuses_the_vm_address_after_a_reboot(self):
+        self._quiet_setup("192.168.1.77")
+        self.assertEqual(network.propose_ip("br0", self.vm, make_host()), "192.168.1.77")
+        self.in_use = {"192.168.1.77"}
+        self.assertEqual(network.propose_ip("br0", self.vm, make_host()), "192.168.1.50")
+
+    def test_proposal_skips_addresses_routed_to_another_interface(self):
+        """Regressione: proponeva un IP che setup_wifi avrebbe poi rifiutato."""
+        with mock.patch("src.network._route_elsewhere", lambda ip, bridge: str(ip) == "192.168.1.50"):
+            self.assertEqual(network.propose_ip("br0", self.vm, make_host()), "192.168.1.51")
+
+    def test_proposal_in_a_small_network(self):
+        host = make_host(address=ipaddress.IPv4Interface("10.0.0.2/29"), gateway=ipaddress.IPv4Address("10.0.0.1"))
+        self.assertEqual(network.propose_ip("br0", self.vm, host), "10.0.0.3")
+
+    def test_prepare_ignores_other_networks(self):
+        config.save(make_vm())
+        with mock.patch("src.network.setup_wifi") as setup:
+            network.prepare_vm("debian")
+        setup.assert_not_called()
+
+    def test_prepare_leaves_foreign_bridges_alone(self):
+        with mock.patch("src.network.setup_wifi") as setup, mock.patch("src.network._is_managed", return_value=False):
+            network.prepare_vm("debian")
+        setup.assert_not_called()
+
+    def test_prepare_proposes_setup_when_not_ready(self):
+        with mock.patch("src.network._is_managed", return_value=True), mock.patch("builtins.print"):
+            network.prepare_vm("debian")
+        self.assertTrue(json.loads(network._state_path("br0").read_text())["hosts"])
+
+    def test_prepare_does_nothing_when_ready(self):
+        with mock.patch("src.network._is_managed", return_value=True), mock.patch(
+            "src.network.is_ready", return_value=True
+        ), mock.patch("src.network.setup_wifi") as setup:
+            network.prepare_vm("debian")
+        setup.assert_not_called()
+
+    def test_declining_stops_the_start(self):
+        with mock.patch("src.network._is_managed", return_value=True), mock.patch("builtins.print"):
+            with self.assertRaisesRegex(SqemuError, "Avvio annullato"):
+                network.prepare_vm("debian", confirm=lambda: False)
+        self.assertEqual(self.executed, [])
+
+    def test_start_override_is_used_for_preparation(self):
+        config.save(make_vm())
+        with mock.patch("src.network._is_managed", return_value=True), mock.patch("builtins.print"):
+            network.prepare_vm("debian", "bridge:br7")
+        self.assertTrue(network._state_path("br7").exists())
+        self.assertEqual(config.load("debian").network, "user")
+
+    def _prepare_all(self, bridge=None):
+        with mock.patch("src.network._is_managed", return_value=True), mock.patch("builtins.print") as printed:
+            network.prepare_all(bridge)
+        return " ".join(str(call.args[0]) for call in printed.call_args_list if call.args)
+
+    def test_prepare_all_assigns_each_vm_its_own_address(self):
+        config.save(make_vm(name="altra", mac="52:54:00:00:00:02", network="bridge:br0"))
+        config.save(make_vm(name="internet", mac="52:54:00:00:00:03"))
+        self._prepare_all()
+        hosts = json.loads(network._state_path("br0").read_text())["hosts"]
+        self.assertEqual(set(hosts), {"altra", "debian"})
+        self.assertEqual(len({assigned["ip"] for assigned in hosts.values()}), 2)
+
+    def test_prepare_all_keeps_saved_addresses(self):
+        self._quiet_setup("192.168.1.77")
+        self.routes = set()
+        self.running = False
+        self._prepare_all("br0")
+        self.assertEqual(json.loads(network._state_path("br0").read_text())["hosts"]["debian"]["ip"], "192.168.1.77")
+
+    def test_prepare_all_skips_ready_vms(self):
+        with mock.patch("src.network.is_ready", return_value=True):
+            self._quiet_setup()
+            self.executed.clear()
+            output = self._prepare_all()
+        self.assertEqual(self.executed, [])
+        self.assertIn("già pronta", output)
+
+    def test_prepare_all_filters_by_bridge(self):
+        config.save(make_vm(name="altra", mac="52:54:00:00:00:02", network="bridge:br1"))
+        self._prepare_all("br1")
+        self.assertTrue(network._state_path("br1").exists())
+        self.assertFalse(network._state_path("br0").exists())
+
+    def test_prepare_all_without_vms_explains_it(self):
+        config.save(make_vm())
+        with self.assertRaisesRegex(SqemuError, "Nessuna VM"):
+            network.prepare_all()
+
+    def test_prepare_all_leaves_foreign_bridges_alone(self):
+        with mock.patch("src.network._is_managed", return_value=False), mock.patch("builtins.print"):
+            network.prepare_all()
+        self.assertEqual(self.executed, [])
+
+    def test_ready_needs_everything_that_a_reboot_removes(self):
+        self.assertFalse(network.is_ready("br0", self.vm))
+
+    def test_menu_prepares_before_starting(self):
+        config.save(make_vm())
+        calls = []
+        with mock.patch("src.network.prepare_vm", side_effect=lambda *a, **k: calls.append("prepare")), mock.patch(
+            "src.vm_manager.start", side_effect=lambda *a, **k: calls.append("start")
+        ), mock.patch("builtins.input", side_effect=["5", "debian", "", "", "n", "", "2", "0"]), mock.patch("builtins.print"):
+            menu.run()
+        self.assertEqual(calls, ["prepare", "start"])
+
+    def test_cli_dry_run_never_prepares(self):
+        config.save(make_vm(network="bridge:br0"))
+        with mock.patch("src.network.prepare_vm") as prepare, mock.patch("src.vm_manager.start"):
+            self.assertEqual(cli.main(["start", "debian", "--dry-run"]), 0)
+            prepare.assert_not_called()
+            self.assertEqual(cli.main(["start", "debian"]), 0)
+            prepare.assert_called_once()
 
 
 class StartNetworkOverrideTests(TempData):
