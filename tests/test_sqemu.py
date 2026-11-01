@@ -1,5 +1,7 @@
+import ipaddress
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -8,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from src import cli, config, deps, disks, menu, qemu, usb, validate, vm_manager
+from src import cli, config, deps, disks, menu, network, qemu, usb, validate, vm_manager
 from src.config import VM, Disk
 from src.validate import SqemuError
 
@@ -116,6 +118,17 @@ class BuildArgvTests(unittest.TestCase):
         self.assertNotIn("-nographic", qemu.build_argv(make_vm(), qemu.RunOptions(display="window")))
         self.assertNotIn("-nographic", qemu.build_argv(make_vm(), qemu.RunOptions(spice_port=5900)))
 
+    def test_saved_spice_uses_the_saved_port(self):
+        argv = qemu.build_argv(make_vm(display="spice", spice_port=5902))
+        self.assertEqual(value_after(argv, "-spice"), ["port=5902,addr=127.0.0.1,disable-ticketing=on"])
+        self.assertNotIn("-nographic", argv)
+
+    def test_a_single_start_can_override_the_saved_screen(self):
+        vm = make_vm(display="spice")
+        argv = qemu.build_argv(vm, qemu.RunOptions(display="serial"))
+        self.assertIn("-nographic", argv)
+        self.assertEqual(value_after(argv, "-spice"), [])
+
     def test_overrides_do_not_change_the_vm(self):
         vm = make_vm()
         argv = qemu.build_argv(vm, qemu.RunOptions(ram="8G", cpus=4))
@@ -130,6 +143,19 @@ class ConfigTests(TempData):
         config.save(vm)
         self.assertEqual(config.load("debian"), vm)
         self.assertEqual(config.list_names(), ["debian"])
+
+    def test_old_files_without_a_screen_stay_valid(self):
+        config.vm_dir("old").mkdir(parents=True)
+        (config.vm_dir("old") / config.CONFIG_FILE).write_text('name = "old"\ndisplay = "serial"\n')
+        vm = config.load("old")
+        self.assertEqual((vm.display, vm.spice_port), ("serial", 5900))
+        config.vm_dir("older").mkdir(parents=True)
+        (config.vm_dir("older") / config.CONFIG_FILE).write_text('name = "older"\n')
+        self.assertIsNone(config.load("older").display)
+
+    def test_unsaved_screen_is_not_written(self):
+        self.assertNotIn("display", config.to_toml(make_vm()))
+        self.assertEqual(config.from_toml(config.to_toml(make_vm())), make_vm())
 
     def test_invalid_file_is_reported_without_crashing(self):
         for content in ('name = "x"\nunknown = 1\n', "not toml", 'name = "$(id)"\n'):
@@ -343,6 +369,18 @@ class AppTests(TempData):
         helper.chmod(0o4755)
         vm_manager.check_bridge("br0", **arguments)
 
+    def test_spice_port_conflicts_with_another_screen(self):
+        config.save(make_vm())
+        with self.assertRaises(SqemuError):
+            vm_manager.prepare_start("debian", spice_port="5900", display="serial")
+        argv = vm_manager.prepare_start("debian", spice_port="5901", display="spice")
+        self.assertEqual(value_after(argv, "-spice"), ["port=5901,addr=127.0.0.1,disable-ticketing=on"])
+
+    def test_cli_options_do_not_change_the_saved_screen(self):
+        config.save(make_vm(display="serial"))
+        vm_manager.prepare_start("debian", spice_port="5901")
+        self.assertEqual(config.load("debian").display, "serial")
+
     def test_invalid_settings_create_no_files(self):
         with self.assertRaises(SqemuError):
             vm_manager.create_vm("new", size="8G", network="bridge")
@@ -363,9 +401,126 @@ class MenuTests(TempData):
     def test_errors_do_not_stop_the_menu(self):
         self.assertIn("Errore:", self._run("1", "x; id #", "8G"))
 
-    def test_every_historic_option_exists(self):
+    def _live_call(self, *screen_answers):
+        config.save(make_vm())
+        answers = ["7", "debian", "/iso/d.iso", "", "", "n", "", *screen_answers]
+        with mock.patch("src.vm_manager.start") as start:
+            output = self._run(*answers)
+        return start, output
+
+    def _start_disk_call(self, *screen_answers):
+        with mock.patch("src.vm_manager.start") as start:
+            output = self._run("5", "debian", "", "", "n", "", *screen_answers)
+        return start, output
+
+    def test_live_offers_spice_when_nothing_is_saved(self):
+        start, _ = self._live_call("", "")
+        self.assertEqual(start.call_args.kwargs["iso"], "/iso/d.iso")
+        saved = config.load("debian")
+        self.assertEqual((saved.display, saved.spice_port), ("spice", 5900))
+
+    def test_normal_start_offers_serial_when_nothing_is_saved(self):
+        config.save(make_vm())
+        self._start_disk_call("")
+        self.assertEqual(config.load("debian").display, "serial")
+
+    def test_choice_is_saved_and_proposed_again(self):
+        self._live_call("", "5905")
+        start, _ = self._start_disk_call("", "")
+        start.assert_called_once()
+        saved = config.load("debian")
+        self.assertEqual((saved.display, saved.spice_port), ("spice", 5905))
+        argv = vm_manager.prepare_start("debian")
+        self.assertEqual(value_after(argv, "-spice"), ["port=5905,addr=127.0.0.1,disable-ticketing=on"])
+
+    def test_live_keeps_an_explicit_serial_choice(self):
+        self._live_call("2")
+        self.assertEqual(config.load("debian").display, "serial")
+        self._live_call_keep()
+        self.assertEqual(config.load("debian").display, "serial")
+
+    def _live_call_keep(self):
+        with mock.patch("src.vm_manager.start"):
+            self._run("7", "debian", "/iso/d.iso", "", "", "n", "", "")
+
+    def test_invalid_screen_saves_nothing(self):
+        start, output = self._live_call("9")
+        start.assert_not_called()
+        self.assertIn("Scelta non valida", output)
+        self.assertIsNone(config.load("debian").display)
+
+    def test_invalid_port_saves_nothing(self):
+        start, output = self._live_call("1", "80")
+        start.assert_not_called()
+        self.assertIn("Porta non valida", output)
+        self.assertIsNone(config.load("debian").display)
+
+    def _network_answers(self, *answers, screen=("2",)):
+        config.save(make_vm())
+        with mock.patch("src.vm_manager.start") as start, mock.patch(
+            "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], ["tap0"])
+        ):
+            output = self._run("5", "debian", "", "", "n", *answers, *screen)
+        return start, output
+
+    def test_network_choice_is_saved_and_proposed_again(self):
+        start, output = self._network_answers("2", "")
+        start.assert_called_once()
+        self.assertIn("br0, virbr0", output)
+        self.assertEqual(config.load("debian").network, "bridge:br0")
+        with mock.patch("src.vm_manager.start"), mock.patch(
+            "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], [])
+        ):
+            self._run("5", "debian", "", "", "n", "", "", "2")
+        self.assertEqual(config.load("debian").network, "bridge:br0")
+
+    def test_network_other_choices(self):
+        self._network_answers("3", "")
+        self.assertEqual(config.load("debian").network, "tap:tap0")
+        self._network_answers("4")
+        self.assertEqual(config.load("debian").network, "none")
+        self._network_answers("1")
+        self.assertEqual(config.load("debian").network, "user")
+
+    def test_invalid_network_saves_nothing(self):
+        start, output = self._network_answers("9", screen=())
+        start.assert_not_called()
+        self.assertIn("Scelta non valida", output)
+        self.assertEqual(config.load("debian").network, "user")
+        start, _ = self._network_answers("2", "br0,helper=/bin/sh", screen=())
+        start.assert_not_called()
+        self.assertEqual(config.load("debian").network, "user")
+
+    def test_wifi_bridge_option(self):
+        with mock.patch("src.network.setup_wifi") as setup, mock.patch("src.network.remove_wifi") as remove:
+            self._run("13", "", "", "192.168.1.50")
+            self._run("13", "2", "br9")
+        self.assertEqual(setup.call_args.args, ("br0", "192.168.1.50"))
+        self.assertEqual(remove.call_args.args, ("br9",))
+
+    def test_every_start_option_asks_for_the_screen(self):
+        config.save(make_vm())
+        config.save(make_vm(name="shell"))
+        cases = {
+            "5": ["5", "debian", "", "", "n", "", "2"],
+            "6": ["6", "debian", "", "", "/d/b.img", "n", "", "2"],
+            "7": ["7", "debian", "/iso/d.iso", "", "", "n", "", "2"],
+            "8": ["8", "debian", "/d/b.img", "n", "/iso/d.iso", "", "", "", "2"],
+            "9": ["9", "", "", "n", "", "2"],
+        }
+        for option, answers in cases.items():
+            with self.subTest(option=option), mock.patch("src.vm_manager.start") as start:
+                self._run(*answers)
+                start.assert_called_once()
+
+    def test_every_menu_option_exists(self):
         expected = {"1", "2", "3", "4", "4.5", "5", "6", "7", "8", "9", "10", "11", "12", "13"}
         self.assertEqual(set(menu.ACTIONS), expected)
+
+    def test_menu_text_matches_the_actions(self):
+        shown = set(re.findall(r"^\[([0-9.]+)\]", menu.MENU, re.MULTILINE))
+        self.assertEqual(shown - {"0"}, set(menu.ACTIONS))
+        self.assertNotIn("SPICE", menu.MENU)
 
     def test_end_of_input_exits_cleanly(self):
         with mock.patch("builtins.input", side_effect=EOFError), mock.patch("builtins.print"):
@@ -426,6 +581,195 @@ class InstallScriptTests(unittest.TestCase):
         self.link.symlink_to("/usr/bin/true")
         self.assertNotEqual(self._script().returncode, 0)
         self.assertEqual(os.readlink(self.link), "/usr/bin/true")
+
+
+def make_host(**settings):
+    defaults = {
+        "uplink": "wlan0",
+        "address": ipaddress.IPv4Interface("192.168.1.31/24"),
+        "gateway": ipaddress.IPv4Address("192.168.1.1"),
+        "used_networks": [ipaddress.ip_network("192.168.1.0/24")],
+    }
+    return network.Host(**{**defaults, **settings})
+
+
+def commands_of(steps):
+    return [" ".join(step.argv) for step in steps]
+
+
+class WifiBridgePlanTests(unittest.TestCase):
+    IP = ipaddress.IPv4Address("192.168.1.50")
+
+    def test_fresh_host_gets_every_step_with_its_undo(self):
+        steps = network.plan("br0", self.IP, make_host())
+        text = commands_of(steps)
+        for expected in (
+            "sudo ip link add br0 type bridge",
+            "sudo ip addr add 192.168.77.1/24 dev br0",
+            "sudo ip link set br0 up",
+            "sudo tee -a /etc/qemu/bridge.conf",
+            "sudo sysctl -w net.ipv4.ip_forward=1",
+            "sudo sysctl -w net.ipv4.conf.wlan0.proxy_arp=1",
+            "sudo sysctl -w net.ipv4.conf.br0.proxy_arp=1",
+            "sudo ip route add 192.168.1.50/32 dev br0",
+            "sudo iptables -I FORWARD -i br0 -j ACCEPT",
+            "sudo iptables -I FORWARD -o br0 -j ACCEPT",
+        ):
+            self.assertIn(expected, text)
+        self.assertIn(["sudo", "ip", "link", "del", "br0"], [step.undo for step in steps])
+        for step in steps:
+            self.assertEqual(step.argv[0], "sudo")
+            self.assertIsNotNone(step.check if step.argv[1] == "iptables" else True)
+
+    def test_existing_settings_are_left_alone(self):
+        host = make_host(
+            bridge_exists=True, bridge_has_address=True, acl_allowed=True, forward=1,
+            proxy_arp={"wlan0": 1, "br0": 1}, route_exists=True,
+        )
+        steps = network.plan("br0", self.IP, host)
+        undo = [step.undo for step in steps if step.undo]
+        self.assertEqual(commands_of(steps)[0], "sudo ip link set br0 up")
+        self.assertEqual(len(steps), 3)
+        self.assertEqual([argv[2] for argv in undo], ["-D", "-D"])
+
+    def test_undo_restores_previous_values(self):
+        steps = network.plan("br0", self.IP, make_host(forward=0, proxy_arp={"wlan0": 0, "br0": 0}))
+        undo = [" ".join(step.undo) for step in steps if step.undo]
+        self.assertIn("sudo sysctl -w net.ipv4.ip_forward=0", undo)
+        self.assertIn("sudo sed -i /^allow br0$/d /etc/qemu/bridge.conf", undo)
+
+    def test_bridge_network_avoids_networks_in_use(self):
+        used = [ipaddress.ip_network("192.168.77.0/24"), ipaddress.ip_network("192.168.1.0/24")]
+        text = commands_of(network.plan("br0", self.IP, make_host(used_networks=used)))
+        self.assertIn("sudo ip addr add 192.168.78.1/24 dev br0", text)
+
+    def test_guest_ip_must_fit_the_host_network(self):
+        host = make_host()
+        self.assertEqual(str(network.parse_guest_ip("192.168.1.50", host)), "192.168.1.50")
+        for bad in ("192.168.2.50", "192.168.1.31", "192.168.1.1", "192.168.1.0", "192.168.1.255", "x", "; id", ""):
+            with self.assertRaises(SqemuError, msg=bad):
+                network.parse_guest_ip(bad, host)
+
+
+class WifiBridgeRunTests(TempData):
+    IP = "192.168.1.50"
+
+    def setUp(self):
+        super().setUp()
+        self.executed = []
+        for target, replacement in (
+            ("src.network.gather", lambda bridge, uplink=None: make_host()),
+            ("src.network._route_elsewhere", lambda ip, bridge: False),
+            ("src.network._route_exists", lambda ip, bridge: False),
+            ("src.network._address_in_use", lambda ip: False),
+            ("src.network.shutil.which", lambda tool: f"/usr/bin/{tool}"),
+            ("src.network.runner.quiet_interactive", lambda argv: 0),
+            ("src.network.runner.run", lambda argv, stdin_text=None: self.executed.append(argv)),
+            ("src.network.runner.quiet", self._quiet),
+        ):
+            patcher = mock.patch(target, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.quiet_codes = {}
+
+    def _quiet(self, argv):
+        self.executed.append(argv)
+        return self.quiet_codes.get(argv[2] if len(argv) > 2 else "", 1)
+
+    def _setup(self, **arguments):
+        with mock.patch("builtins.print"):
+            return network.setup_wifi("br0", self.IP, **arguments)
+
+    def _remove(self, **arguments):
+        with mock.patch("builtins.print"):
+            return network.remove_wifi("br0", **arguments)
+
+    def test_declining_changes_nothing(self):
+        self.assertFalse(self._setup(confirm=lambda: False))
+        self.assertEqual(self.executed, [])
+        self.assertFalse(network._state_path("br0").exists())
+
+    def test_setup_then_remove_undoes_in_reverse_order(self):
+        self.assertTrue(self._setup())
+        added = [argv for argv in self.executed if argv[2] != "-C"]
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertEqual(state["ips"], [self.IP])
+        self.executed.clear()
+
+        self.assertTrue(self._remove())
+        self.assertEqual(self.executed[-1], ["sudo", "ip", "link", "del", "br0"])
+        self.assertEqual(self.executed[0][:3], ["sudo", "iptables", "-D"])
+        self.assertLess(len(self.executed), len(added))
+        self.assertFalse(network._state_path("br0").exists())
+
+    def test_existing_firewall_rule_is_not_added_or_removed(self):
+        self.quiet_codes["-C"] = 0
+        self._setup()
+        self.assertFalse([argv for argv in self.executed if "-I" in argv])
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertFalse([argv for argv in state["undo"] if "-D" in argv])
+
+    def test_failure_keeps_what_is_needed_to_undo(self):
+        def fail_on_route(argv, stdin_text=None):
+            if "route" in argv:
+                raise SqemuError("sudo è terminato con codice di errore 1.")
+
+        with mock.patch("src.network.runner.run", fail_on_route):
+            with self.assertRaisesRegex(SqemuError, "remove-wifi br0"):
+                self._setup()
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertIn(["sudo", "ip", "link", "del", "br0"], state["undo"])
+
+    def test_second_vm_keeps_a_single_undo_for_shared_steps(self):
+        self._setup()
+        with mock.patch("builtins.print"):
+            network.setup_wifi("br0", "192.168.1.51")
+        state = json.loads(network._state_path("br0").read_text())
+        self.assertEqual(state["ips"], ["192.168.1.50", "192.168.1.51"])
+        self.assertEqual(len(state["undo"]), len({tuple(argv) for argv in state["undo"]}))
+        self.assertEqual(sum("route" in argv for argv in state["undo"]), 2)
+
+    def test_address_already_in_use_is_refused(self):
+        with mock.patch("src.network._address_in_use", lambda ip: True):
+            with self.assertRaisesRegex(SqemuError, "risponde già"):
+                self._setup()
+        self.assertEqual(self.executed, [])
+
+    def test_remove_without_state_touches_nothing(self):
+        with self.assertRaisesRegex(SqemuError, "nulla da annullare"):
+            self._remove()
+        self.assertEqual(self.executed, [])
+
+    def test_tampered_state_is_not_executed(self):
+        path = network._state_path("br0")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"undo": [["sudo", "sh", "-c", "id"]]}))
+        with self.assertRaisesRegex(SqemuError, "non riconosciuto"):
+            self._remove()
+        self.assertEqual(self.executed, [])
+
+    def test_invalid_names_are_rejected(self):
+        for bad in ("br0;id", "a" * 16):
+            with self.assertRaises(SqemuError, msg=bad):
+                network.setup_wifi(bad, self.IP)
+
+
+class StartNetworkOverrideTests(TempData):
+    def test_network_for_a_single_start(self):
+        config.save(make_vm())
+        argv = vm_manager.prepare_start("debian", network="none")
+        self.assertEqual(value_after(argv, "-nic"), ["none"])
+        self.assertEqual(config.load("debian").network, "user")
+        with self.assertRaises(SqemuError):
+            vm_manager.prepare_start("debian", network="ponte")
+
+    def test_list_interfaces(self):
+        sys_net = self.tmp / "net"
+        (sys_net / "br0/bridge").mkdir(parents=True)
+        (sys_net / "tap0").mkdir()
+        (sys_net / "tap0/tun_flags").touch()
+        (sys_net / "wlan0").mkdir()
+        self.assertEqual(vm_manager.list_interfaces(str(sys_net)), (["br0"], ["tap0"]))
 
 
 def boot_sector(message):

@@ -7,7 +7,7 @@ DISK_INTERFACES = ("ide", "virtio", "scsi")
 NICS = ("e1000", "virtio-net-pci", "rtl8139")
 VGAS = ("std", "qxl", "virtio", "vmware", "cirrus", "none")
 AUDIO_DRIVERS = ("none", "pa", "pipewire", "alsa", "sdl")
-DISPLAYS = ("serial", "window")
+DISPLAYS = ("serial", "spice", "window")
 
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _SIZE = re.compile(r"[1-9][0-9]*(\.[0-9]+)?[KMGT]")
@@ -79,6 +79,12 @@ def choice(value, allowed, label):
 def mac(value):
     if not _MAC.fullmatch(value):
         raise SqemuError(f"Indirizzo MAC non valido: {value!r}.")
+    return value
+
+
+def interface(value):
+    if not _INTERFACE.fullmatch(value):
+        raise SqemuError(f"Nome di interfaccia non valido: {value!r}.")
     return value
 
 

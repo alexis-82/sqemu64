@@ -1,6 +1,6 @@
-"""Menu interattivo: stessi numeri della versione storica, stessa logica della CLI."""
+"""Menu interattivo: stessa logica della riga di comando."""
 
-from . import config, deps, disks, usb, validate, vm_manager
+from . import config, deps, disks, network, usb, validate, vm_manager
 from .validate import SqemuError
 
 GREEN = "\033[92m"
@@ -31,15 +31,18 @@ MENU = """
 [8] CD Live con dischi multipli
 [9] Avvio shell
 
-[10] SPICE
+[10] Apri cartella
+[11] Lista sistemi installati
 
-[11] Apri cartella
-[12] Lista sistemi installati
-
-[13] Installazione delle dipendenze
+[12] Installazione delle dipendenze
+[13] Bridge sul Wi-Fi
 
 [0] Uscire
 """
+
+
+SCREENS = {"1": "spice", "2": "serial", "3": "window"}
+NETWORKS = {"1": "user", "2": "bridge", "3": "tap", "4": "none"}
 
 
 def _ask(prompt, default=None):
@@ -103,6 +106,45 @@ def _ask_usb():
     return _required("Dispositivo (es. sdb)")
 
 
+def _choose_screen(name, live=False):
+    """Chiede lo schermo e lo salva. Senza una scelta salvata, le ISO propongono SPICE."""
+    vm = config.load(name)
+    saved = vm.display or ("spice" if live else "serial")
+    default = next(key for key, display in SCREENS.items() if display == saved)
+    choice = _required("Schermo: 1 = SPICE (per i sistemi grafici), 2 = console seriale, 3 = finestra", default)
+    display = SCREENS.get(choice)
+    if display is None:
+        raise SqemuError(f"Scelta non valida: {choice!r}.")
+    port = _required("Porta", str(vm.spice_port)) if display == "spice" else None
+    vm_manager.save_screen(name, display, port)
+
+
+def _choose_network(name):
+    """Chiede la rete e la salva: con Invio resta quella della VM."""
+    vm = config.load(name)
+    kind, _, saved_interface = vm.network.partition(":")
+    default = next(key for key, value in NETWORKS.items() if value == kind)
+    choice = _required("Rete: 1 = Internet (user), 2 = bridge, 3 = tap, 4 = nessuna", default)
+    selected = NETWORKS.get(choice)
+    if selected is None:
+        raise SqemuError(f"Scelta non valida: {choice!r}.")
+
+    if selected in ("user", "none"):
+        vm_manager.save_network(name, selected)
+        return
+    bridges, taps = vm_manager.list_interfaces()
+    found = bridges if selected == "bridge" else taps
+    print(f"Disponibili: {', '.join(found) if found else '(nessuna)'}")
+    proposal = saved_interface if kind == selected else (found[0] if found else None)
+    interface = _required("Nome dell'interfaccia", proposal)
+    vm_manager.save_network(name, f"{selected}:{interface}")
+
+
+def _choose_devices(name, live=False):
+    _choose_network(name)
+    _choose_screen(name, live=live)
+
+
 def _ask_extra_disks():
     values = [_required("Nome del disco secondario")]
     while _yes("Aggiungere un altro disco?"):
@@ -147,36 +189,58 @@ def _clone_disk():
 
 def _start_disk():
     name = _ask_vm()
-    vm_manager.start(name, **_ask_overrides(), usb_device=_ask_usb())
+    options = _ask_overrides()
+    usb_device = _ask_usb()
+    _choose_devices(name)
+    vm_manager.start(name, **options, usb_device=usb_device)
 
 
 def _start_multiple():
     name = _ask_vm()
-    vm_manager.start(name, **_ask_overrides(), disk_values=_ask_extra_disks())
+    options = _ask_overrides()
+    disk_values = _ask_extra_disks()
+    _choose_devices(name)
+    vm_manager.start(name, **options, disk_values=disk_values)
 
 
 def _live():
     name = _ask_vm()
     iso = _required("Percorso dell'immagine ISO")
-    vm_manager.start(name, **_ask_overrides(), iso=iso, usb_device=_ask_usb())
+    options = _ask_overrides()
+    usb_device = _ask_usb()
+    _choose_devices(name, live=True)
+    vm_manager.start(name, **options, iso=iso, usb_device=usb_device)
 
 
 def _live_multiple():
     name = _ask_vm()
     disk_values = _ask_extra_disks()
     iso = _required("Percorso dell'immagine ISO")
-    vm_manager.start(name, **_ask_overrides(), iso=iso, disk_values=disk_values)
+    options = _ask_overrides()
+    _choose_devices(name, live=True)
+    vm_manager.start(name, **options, iso=iso, disk_values=disk_values)
 
 
 def _shell():
     if not config.exists("shell"):
         raise SqemuError("Crea prima la VM con: sqemu64 vm create shell --disk /percorso/shell.img")
-    vm_manager.start("shell", **_ask_overrides(), usb_device=_ask_usb())
+    options = _ask_overrides()
+    usb_device = _ask_usb()
+    _choose_devices("shell")
+    vm_manager.start("shell", **options, usb_device=usb_device)
 
 
-def _spice():
-    name = _ask_vm()
-    vm_manager.start(name, **_ask_overrides(), spice_port=_required("Porta", "5900"))
+def _wifi_bridge():
+    choice = _required("Bridge sul Wi-Fi: 1 = prepara, 2 = rimuovi", "1")
+    if choice not in ("1", "2"):
+        raise SqemuError(f"Scelta non valida: {choice!r}.")
+    bridge = _required("Nome del bridge", "br0")
+    confirm = lambda: _yes("Procedere?")  # noqa: E731
+    if choice == "2":
+        network.remove_wifi(bridge, confirm=confirm)
+        return
+    ip = _required("Indirizzo della VM nella rete di questo computer (es. 192.168.1.50)")
+    network.setup_wifi(bridge, ip, confirm=confirm)
 
 
 def _install():
@@ -196,10 +260,10 @@ ACTIONS = {
     "7": _live,
     "8": _live_multiple,
     "9": _shell,
-    "10": _spice,
-    "11": vm_manager.open_folder,
-    "12": vm_manager.print_inventory,
-    "13": _install,
+    "10": vm_manager.open_folder,
+    "11": vm_manager.print_inventory,
+    "12": _install,
+    "13": _wifi_bridge,
 }
 
 

@@ -83,10 +83,11 @@ def build_argv(vm, options=None):
             "-device", "usb-storage,bus=usb.0,drive=usbdisk",
         ]
 
-    if options.spice_port:
+    display = "spice" if options.spice_port else options.display or vm.display or "serial"
+    if display == "spice":
         argv += [
             "-vga", "qxl",
-            "-spice", f"port={options.spice_port},addr=127.0.0.1,disable-ticketing=on",
+            "-spice", f"port={options.spice_port or vm.spice_port},addr=127.0.0.1,disable-ticketing=on",
             "-display", "none",
             # canale per l'agente SPICE del guest: copia/incolla con il client
             "-device", "virtio-serial-pci",
@@ -95,7 +96,7 @@ def build_argv(vm, options=None):
         ]
     else:
         argv += ["-vga", vm.vga]
-        if (options.display or vm.display) == "serial":
+        if display == "serial":
             argv += ["-nographic"]
 
     return argv

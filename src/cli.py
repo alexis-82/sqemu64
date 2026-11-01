@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, deps, disks, menu, usb, validate, vm_manager
+from . import __version__, deps, disks, menu, network, usb, validate, vm_manager
 from .validate import SqemuError
 
 
@@ -13,6 +13,7 @@ def _add_run_options(parser):
     parser.add_argument("--cpus", help="CPU solo per questo avvio")
     parser.add_argument("--usb", metavar="DEV", help="chiavetta USB da collegare, per esempio sdb")
     parser.add_argument("--display", choices=validate.DISPLAYS, help="schermo solo per questo avvio")
+    parser.add_argument("--network", help="rete solo per questo avvio: user, none, tap:<nome>, bridge:<nome>")
     parser.add_argument("--dry-run", action="store_true", help="mostra il comando senza eseguirlo")
 
 
@@ -59,6 +60,19 @@ def build_parser():
     vm_create.add_argument("--disk-interface", choices=validate.DISK_INTERFACES)
     vm_create.add_argument("--audio", choices=validate.AUDIO_DRIVERS)
     vm_create.add_argument("--display", choices=validate.DISPLAYS, help="predefinito: serial")
+    vm_create.add_argument("--spice-port", help="porta SPICE salvata (predefinita: 5900)")
+
+    net = commands.add_parser("network", help="gestisce il bridge sul Wi-Fi").add_subparsers(
+        dest="network_command", required=True
+    )
+    setup = net.add_parser("setup-wifi", help="porta le VM nella LAN dell'host tramite proxy ARP")
+    setup.add_argument("bridge")
+    setup.add_argument("ip", help="indirizzo della VM nella rete dell'host")
+    setup.add_argument("--interface", help="connessione da usare (predefinita: quella del gateway)")
+    setup.add_argument("--yes", action="store_true", help="non chiede conferma")
+    remove = net.add_parser("remove-wifi", help="annulla solo ciò che ha fatto setup-wifi")
+    remove.add_argument("bridge")
+    remove.add_argument("--yes", action="store_true", help="non chiede conferma")
 
     start = commands.add_parser("start", help="avvia una VM")
     start.add_argument("name")
@@ -95,9 +109,23 @@ def _run_vm_create(args):
         "disk_interface": args.disk_interface,
         "audio": args.audio,
         "display": args.display,
+        "spice_port": validate.port(args.spice_port) if args.spice_port else None,
     }
     vm = vm_manager.create_vm(args.name, size=args.size, disk_values=args.disk, **settings)
     print(f"VM creata: {vm.name}")
+
+
+def _confirm(args):
+    if args.yes:
+        return None
+    return lambda: input("Procedere? (s/N): ").strip().lower() in ("s", "si", "sì", "y", "yes")
+
+
+def _run_network(args):
+    if args.network_command == "setup-wifi":
+        network.setup_wifi(args.bridge, args.ip, args.interface, confirm=_confirm(args))
+    else:
+        network.remove_wifi(args.bridge, confirm=_confirm(args))
 
 
 def _run_usb():
@@ -124,15 +152,18 @@ def dispatch(args):
         _run_disk(args)
     elif command == "vm":
         _run_vm_create(args)
+    elif command == "network":
+        _run_network(args)
     elif command == "start":
         vm_manager.start(
             args.name, dry_run=args.dry_run, ram=args.ram, cpus=args.cpus, iso=args.iso,
             disk_values=args.disk, usb_device=args.usb, spice_port=args.spice, display=args.display,
+            network=args.network,
         )
     elif command == "shell":
         vm_manager.start(
             "shell", dry_run=args.dry_run, ram=args.ram, cpus=args.cpus,
-            usb_device=args.usb, display=args.display,
+            usb_device=args.usb, display=args.display, network=args.network,
         )
 
 
@@ -145,7 +176,7 @@ def main(argv=None):
     except SqemuError as error:
         print(f"Errore: {error}", file=sys.stderr)
         return 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         print()
         return 130
     return 0

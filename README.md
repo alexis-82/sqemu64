@@ -54,17 +54,20 @@ sqemu64 start debian                           # avvio normale
 | 3 | Convertire in VMDK | `sqemu64 disk convert ORIGINE NUOVO --to vmdk` |
 | 4 | Ridimensionare | `sqemu64 disk resize NOME 20G` |
 | 4.5 | Clonare | `sqemu64 disk clone ORIGINE COPIA` |
-| 5 | Avviare | `sqemu64 start VM [--ram 4G] [--cpus 4] [--usb sdb]` |
+| 5 | Avviare | `sqemu64 start VM [--ram 4G] [--cpus 4] [--usb sdb] [--network bridge:br0]` |
 | 6 | Dischi multipli | `sqemu64 start VM --disk ALTRO` |
 | 7 | CD Live | `sqemu64 start VM --iso FILE.iso [--usb sdb]` |
 | 8 | CD Live con dischi multipli | `sqemu64 start VM --iso FILE.iso --disk ALTRO` |
 | 9 | Sistema minimale | `sqemu64 shell [--usb sdb]` |
-| 10 | SPICE | `sqemu64 start VM --spice 5900` |
-| 11 | Aprire la cartella | `sqemu64 folder` |
-| 12 | Elenco | `sqemu64 list` |
-| 13 | Dipendenze | `sqemu64 deps [--install]` |
+| 10 | Aprire la cartella | `sqemu64 folder` |
+| 11 | Elenco | `sqemu64 list` |
+| 12 | Dipendenze | `sqemu64 deps [--install]` |
+| 13 | Bridge sul Wi-Fi | `sqemu64 network setup-wifi BRIDGE IP` e `network remove-wifi BRIDGE` |
 
 Con `--dry-run` i comandi `start` e `shell` mostrano la riga di QEMU senza eseguirla.
+
+Per usare SPICE dal menu, scegli `1 = SPICE` quando viene chiesto lo schermo. Da riga di
+comando, aggiungi `--spice 5900` a `sqemu64 start`, solo per quell'avvio.
 
 ## Dove sono i dati
 
@@ -86,17 +89,54 @@ sqemu64 vm create win --disk ./win.img --ram 4G --cpus 4
 
 ## Rete
 
-- `user` (predefinita): accesso a Internet senza alcuna configurazione.
+- `user` (predefinita): accesso a Internet senza alcuna configurazione. La VM non ha un
+  indirizzo nella LAN.
+- `bridge:<bridge>`: collega la VM a un bridge tramite `qemu-bridge-helper`, senza root a
+  ogni avvio. Se manca qualcosa, sQemu64 mostra i comandi da lanciare.
 - `tap:<interfaccia>`: usa un'interfaccia già creata, per esempio con
   `sudo ip tuntap add tap0 mode tap user $USER && sudo ip link set tap0 up`.
-- `bridge:<bridge>`: collega la VM a un bridge tramite `qemu-bridge-helper`, senza root a
-  ogni avvio. Se manca qualcosa, sQemu64 mostra i comandi da lanciare. Per portare le VM
-  sulla LAN serve una scheda Ethernet nel bridge: con il Wi-Fi di solito non funziona.
 - `none`: nessuna rete.
 
-### Bridge
+Le opzioni di avvio del menu chiedono la rete e la salvano nella VM, così ai prossimi avvii
+basta premere Invio. Da riga di comando, `sqemu64 vm create --network` imposta la rete di
+una nuova VM, mentre `sqemu64 start --network` vale solo per quell'avvio.
 
-Per creare un bridge isolato, in cui le VM comunicano con il computer host:
+### Bridge con il Wi-Fi
+
+Una scheda Wi-Fi di solito non può entrare in un bridge, ma la VM può comunque avere un
+indirizzo nella stessa rete del computer, con accesso a Internet e alla LAN:
+
+```bash
+sqemu64 network setup-wifi br0 192.168.1.50   # oppure opzione 13 del menu
+sqemu64 vm create nome --size 40G --network bridge:br0
+sqemu64 network remove-wifi br0               # annulla solo ciò che ha fatto setup-wifi
+```
+
+Il comando mostra le operazioni, chiede conferma e usa `sudo` solo per queste. Sceglie la
+connessione del gateway, altrimenti puoi indicarla con `--interface`. Usa il proxy ARP: il
+computer risponde sulla LAN al posto della VM.
+
+- Nel sistema ospite imposta un **indirizzo statico**, con il router come gateway e DNS. Il
+  DHCP non funziona. Il gateway è necessario anche per comunicare con il computer host.
+- Con NetworkManager, per esempio su Debian con desktop, usa `nmcli`: un indirizzo aggiunto
+  con `ip addr` può sparire quando il DHCP fallisce.
+
+  ```bash
+  sudo nmcli con add type ethernet ifname ens3 con-name lan ipv4.method manual \
+    ipv4.addresses 192.168.1.50/24 ipv4.gateway 192.168.1.1 ipv4.dns 192.168.1.1 \
+    connection.autoconnect-priority 10
+  sudo nmcli con up lan
+  ```
+- Scegli un IP libero, fuori dall'intervallo che il router assegna via DHCP.
+- Ogni VM ha il suo IP: rilancia il comando per ognuna, sullo stesso bridge.
+- Tutto dura fino al riavvio, tranne l'autorizzazione in `bridge.conf`: dopo un riavvio
+  rilancia il comando.
+- Il broadcast non attraversa il computer, quindi la ricerca automatica di dispositivi in
+  rete può non funzionare.
+
+### Bridge con il cavo o isolato
+
+Per un bridge isolato, in cui le VM comunicano solo con il computer:
 
 ```bash
 sudo ip link add br0 type bridge
@@ -107,13 +147,9 @@ echo 'allow br0' | sudo tee -a /etc/qemu/bridge.conf
 sqemu64 vm create nome --size 40G --network bridge:br0
 ```
 
-- Un bridge isolato non dà accesso a Internet e non ha un server DHCP: nel sistema ospite
-  va assegnato un indirizzo manualmente, per esempio `192.168.77.2/24`.
-- Il bridge sparisce al riavvio e va ricreato, mentre l'autorizzazione in `bridge.conf` resta.
-- Per dare alle VM un indirizzo nella LAN, collega al bridge una scheda Ethernet, in genere
-  con NetworkManager. Questo caso non è ancora stato provato.
-- Con il solo Wi-Fi usa la rete `user`: la maggior parte delle reti Wi-Fi non accetta il
-  MAC di una VM collegata tramite bridge.
+Con il cavo, puoi invece collegare al bridge la scheda Ethernet, in genere con
+NetworkManager: la VM ottiene un indirizzo dal router come gli altri dispositivi. Questo
+caso non è ancora stato provato.
 
 ## Chiavette USB
 
@@ -125,8 +161,14 @@ concederli fino alla rimozione della chiavetta.
 
 Le VM usano il terminale come console seriale: per chiuderle premi `Ctrl-A` e poi `X`.
 Il sistema ospite deve avere una console seriale attiva (`console=ttyS0`): se il
-terminale resta vuoto, in genere è questo il motivo. Molte ISO di installazione
-scrivono solo sullo schermo, mentre Windows in pratica non è utilizzabile così.
+terminale resta vuoto o si ferma dopo il BIOS, in genere è questo il motivo. Molte ISO
+di installazione, come quella di Debian, e molti sistemi installati scrivono solo sullo
+schermo: con questi usa SPICE. Windows in pratica non è utilizzabile dalla console seriale.
+
+Tutte le opzioni di avvio del menu chiedono lo schermo e salvano la scelta nella VM, così
+ai prossimi avvii basta premere Invio. Senza una scelta salvata, le opzioni 7 e 8 propongono
+SPICE e le altre la console seriale. Da riga di comando, `--display` e `--spice` valgono solo
+per quell'avvio; altrimenti `sqemu64 start` usa la scelta salvata.
 
 Se un modulo di QEMU manca, sQemu64 lo segnala all'avvio. Con `deps --install` sono
 disponibili audio (`vm create --audio pipewire`) e SPICE (`--spice`). La finestra

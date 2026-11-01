@@ -1,5 +1,6 @@
 """Azioni sulle VM, condivise dalla riga di comando e dal menu."""
 
+import dataclasses
 import os
 import shutil
 import stat
@@ -63,8 +64,8 @@ def check_bridge(bridge, sys_net=SYS_NET, acl_path=BRIDGE_ACL, helpers=BRIDGE_HE
             f"Il bridge {bridge} non esiste. Per crearlo isolato dalla rete:\n"
             f"  sudo ip link add {bridge} type bridge\n"
             f"  sudo ip link set {bridge} up\n"
-            "Per portare le VM sulla LAN va collegata al bridge una scheda Ethernet "
-            "(in genere con NetworkManager): con il Wi-Fi di solito non funziona."
+            "Per portare le VM sulla LAN: con il Wi-Fi usa 'sqemu64 network setup-wifi "
+            f"{bridge} <IP>', con il cavo collega al bridge la scheda Ethernet (in genere con NetworkManager)."
         )
     try:
         with open(acl_path, encoding="utf-8") as file:
@@ -99,15 +100,59 @@ def _check_network(vm):
             )
 
 
-def prepare_start(name, ram=None, cpus=None, iso=None, disk_values=(), usb_device=None, spice_port=None, display=None):
-    """Controlla tutto e restituisce il comando da eseguire, senza avviare nulla."""
+def save_screen(name, display, spice_port=None):
+    """Ricorda lo schermo scelto, che il menu riproporrà ai prossimi avvii."""
     vm = config.load(name)
-    if not vm.disks and not iso:
-        raise SqemuError(f"La VM {name!r} non ha dischi: indica un'immagine ISO da avviare.")
+    vm.display = validate.choice(display, validate.DISPLAYS, "Schermo")
+    if spice_port:
+        vm.spice_port = validate.port(spice_port)
+    config.save(vm)
+
+
+def _resolve_screen(vm, display, spice_port):
+    """Decide lo schermo di questo avvio: prima le opzioni indicate, poi la scelta salvata."""
     if display:
         validate.choice(display, validate.DISPLAYS, "Schermo")
-    if display and spice_port:
-        raise SqemuError("Con SPICE non si può scegliere anche lo schermo.")
+    if spice_port and display not in (None, "spice"):
+        raise SqemuError("La porta SPICE si può indicare solo con lo schermo SPICE.")
+    display = "spice" if spice_port else display or vm.display or "serial"
+    if display != "spice":
+        return display, None
+    return display, validate.port(spice_port) if spice_port else vm.spice_port
+
+
+def save_network(name, network):
+    """Ricorda la rete scelta, che il menu riproporrà ai prossimi avvii."""
+    vm = config.load(name)
+    vm.network = validate.network(network)
+    config.save(vm)
+
+
+def list_interfaces(sys_net=SYS_NET):
+    """Restituisce i bridge e le interfacce tap presenti su questo computer."""
+    bridges, taps = [], []
+    try:
+        names = sorted(os.listdir(sys_net))
+    except OSError:
+        return bridges, taps
+    for name in names:
+        if os.path.isdir(f"{sys_net}/{name}/bridge"):
+            bridges.append(name)
+        elif os.path.exists(f"{sys_net}/{name}/tun_flags"):
+            taps.append(name)
+    return bridges, taps
+
+
+def prepare_start(
+    name, ram=None, cpus=None, iso=None, disk_values=(), usb_device=None, spice_port=None, display=None, network=None
+):
+    """Controlla tutto e restituisce il comando da eseguire, senza avviare nulla."""
+    vm = config.load(name)
+    if network:
+        vm = dataclasses.replace(vm, network=network)
+    if not vm.disks and not iso:
+        raise SqemuError(f"La VM {name!r} non ha dischi: indica un'immagine ISO da avviare.")
+    display, spice_port = _resolve_screen(vm, display, spice_port)
 
     iso_path = None
     if iso:
@@ -121,7 +166,7 @@ def prepare_start(name, ram=None, cpus=None, iso=None, disk_values=(), usb_devic
         iso=iso_path,
         extra_disks=[describe_disk(value) for value in disk_values],
         usb_device=usb.select(usb_device) if usb_device else None,
-        spice_port=validate.port(spice_port) if spice_port else None,
+        spice_port=spice_port,
         display=display,
     )
     _check_network(vm)
@@ -138,16 +183,17 @@ def start(name, dry_run=False, **kwargs):
         raise SqemuError(problem)
     vm = config.load(name)
     deps.check_audio(vm.audio)
-    if kwargs.get("spice_port"):
+    display, spice_port = _resolve_screen(vm, kwargs.get("display"), kwargs.get("spice_port"))
+    if display == "spice":
         deps.check_spice()
-        print(f"Connessione SPICE: remote-viewer spice://127.0.0.1:{kwargs['spice_port']}")
+        print(f"Connessione SPICE: remote-viewer spice://127.0.0.1:{spice_port}")
         print("Senza password: può collegarsi chiunque abbia un account su questo computer.")
         print("Per chiudere la VM premi Ctrl-C in questo terminale.")
-    elif (kwargs.get("display") or vm.display) == "window":
+    elif display == "window":
         deps.check_window()
     else:
         print("Console seriale: per chiudere la VM premi Ctrl-A e poi X.")
-        print("Se non compare nulla, il sistema ospite non usa la console seriale (console=ttyS0).")
+        print("Se resta vuota o si ferma dopo il BIOS, il sistema ospite scrive solo sullo schermo: usa SPICE.")
     runner.run(argv)
 
 
@@ -156,7 +202,8 @@ def print_inventory():
     print("Macchine virtuali:")
     for name in names:
         vm = config.load(name)
-        print(f"  {name}  RAM {vm.ram}, CPU {vm.cpus}, dischi {len(vm.disks)}, rete {vm.network}")
+        screen = vm.display or "serial"
+        print(f"  {name}  RAM {vm.ram}, CPU {vm.cpus}, dischi {len(vm.disks)}, rete {vm.network}, schermo {screen}")
     if not names:
         print("  (nessuna)")
 

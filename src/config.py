@@ -56,7 +56,8 @@ class VM:
     vga: str = "std"
     disk_interface: str = "ide"
     audio: str = "none"
-    display: str = "serial"
+    display: str | None = None  # None: nessuna scelta salvata, si usa la console seriale
+    spice_port: int = 5900
     mac: str = field(default_factory=random_mac)
 
     def __post_init__(self):
@@ -68,14 +69,18 @@ class VM:
         validate.choice(self.vga, validate.VGAS, "Scheda video")
         validate.choice(self.disk_interface, validate.DISK_INTERFACES, "Interfaccia disco")
         validate.choice(self.audio, validate.AUDIO_DRIVERS, "Driver audio")
-        validate.choice(self.display, validate.DISPLAYS, "Schermo")
+        if self.display is not None:
+            validate.choice(self.display, validate.DISPLAYS, "Schermo")
+        validate.port(self.spice_port)
         validate.mac(self.mac)
 
 
 def to_toml(vm):
     lines = []
-    for key in ("name", "ram", "cpus", "network", "nic", "vga", "disk_interface", "audio", "display", "mac"):
-        lines.append(f"{key} = {json.dumps(getattr(vm, key), ensure_ascii=False)}")
+    for key in ("name", "ram", "cpus", "network", "nic", "vga", "disk_interface", "audio", "display", "spice_port", "mac"):
+        value = getattr(vm, key)
+        if value is not None:
+            lines.append(f"{key} = {json.dumps(value, ensure_ascii=False)}")
     for disk in vm.disks:
         lines += [
             "",

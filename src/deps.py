@@ -11,6 +11,7 @@ from .validate import SqemuError
 REQUIRED = {"qemu-system-x86_64": "avvio delle VM", "qemu-img": "gestione dei dischi"}
 OPTIONAL = {
     "lsblk": "selezione delle chiavette USB",
+    "iptables": "bridge sul Wi-Fi",
     "remote-viewer": "solo per collegarsi via SPICE",
     "dmg2img": "conversione DMG (in alternativa viene usato qemu-img)",
     "xdg-open": "apertura della cartella",

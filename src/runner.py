@@ -7,14 +7,30 @@ from .validate import SqemuError
 _MISSING = "Comando non trovato: {}. Controlla le dipendenze con: sqemu64 deps"
 
 
-def run(argv):
+def run(argv, stdin_text=None):
     """Esegue un comando collegato al terminale e segnala gli errori."""
     try:
-        code = subprocess.run(argv, check=False).returncode
+        code = subprocess.run(argv, check=False, input=stdin_text, text=stdin_text is not None).returncode
     except FileNotFoundError:
         raise SqemuError(_MISSING.format(argv[0])) from None
     if code != 0:
         raise SqemuError(f"{argv[0]} è terminato con codice di errore {code}.")
+
+
+def quiet(argv):
+    """Esegue un comando senza mostrare l'output e ne restituisce il codice di uscita."""
+    try:
+        return subprocess.run(argv, check=False, capture_output=True).returncode
+    except FileNotFoundError:
+        raise SqemuError(_MISSING.format(argv[0])) from None
+
+
+def quiet_interactive(argv):
+    """Come quiet(), ma lascia il terminale libero: serve per chiedere la password di sudo."""
+    try:
+        return subprocess.run(argv, check=False).returncode
+    except FileNotFoundError:
+        raise SqemuError(_MISSING.format(argv[0])) from None
 
 
 def probe(argv, stdin_text):
