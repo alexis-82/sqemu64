@@ -5,7 +5,7 @@ import os
 import shutil
 import stat
 
-from . import config, deps, disks, qemu, runner, usb, validate
+from . import config, deps, disks, instances, qemu, runner, usb, validate
 from .config import VM, Disk
 from .validate import SqemuError
 
@@ -121,6 +121,13 @@ def _resolve_screen(vm, display, spice_port):
     return display, validate.port(spice_port) if spice_port else vm.spice_port
 
 
+def save_background(name, background):
+    """Ricorda se avviare la VM in background, come lo schermo e la rete."""
+    vm = config.load(name)
+    vm.background = bool(background)
+    config.save(vm)
+
+
 def save_network(name, network):
     """Ricorda la rete scelta, che il menu riproporrà ai prossimi avvii."""
     vm = config.load(name)
@@ -144,7 +151,8 @@ def list_interfaces(sys_net=SYS_NET):
 
 
 def prepare_start(
-    name, ram=None, cpus=None, iso=None, disk_values=(), usb_device=None, spice_port=None, display=None, network=None
+    name, ram=None, cpus=None, iso=None, disk_values=(), usb_device=None, spice_port=None, display=None, network=None,
+    detach=None,
 ):
     """Controlla tutto e restituisce il comando da eseguire, senza avviare nulla."""
     vm = config.load(name)
@@ -168,12 +176,16 @@ def prepare_start(
         usb_device=usb.select(usb_device) if usb_device else None,
         spice_port=spice_port,
         display=display,
+        run_dir=str(instances.run_dir(name, create=True)),
+        detach=vm.background if detach is None else detach,
     )
     _check_network(vm)
     return qemu.build_argv(vm, options)
 
 
 def start(name, dry_run=False, **kwargs):
+    if not dry_run:
+        instances.check_not_running(name)
     argv = prepare_start(name, **kwargs)
     if dry_run:
         print(" ".join(argv))
@@ -183,18 +195,26 @@ def start(name, dry_run=False, **kwargs):
         raise SqemuError(problem)
     vm = config.load(name)
     deps.check_audio(vm.audio)
+    detach = vm.background if kwargs.get("detach") is None else kwargs["detach"]
     display, spice_port = _resolve_screen(vm, kwargs.get("display"), kwargs.get("spice_port"))
     if display == "spice":
         deps.check_spice()
         print(f"Connessione SPICE: remote-viewer spice://127.0.0.1:{spice_port}")
         print("Senza password: può collegarsi chiunque abbia un account su questo computer.")
-        print("Per chiudere la VM premi Ctrl-C in questo terminale.")
+        if not detach:
+            print("Per chiudere la VM premi Ctrl-C in questo terminale.")
     elif display == "window":
         deps.check_window()
+    elif detach:
+        print(f"Console seriale: sqemu64 console {name}")
     else:
         print("Console seriale: per chiudere la VM premi Ctrl-A e poi X.")
         print("Se resta vuota o si ferma dopo il BIOS, il sistema ospite scrive solo sullo schermo: usa SPICE.")
+    # un socket rimasto da un avvio in background farebbe credere che ci sia una console
+    (instances.run_dir(name) / instances.SERIAL_SOCKET).unlink(missing_ok=True)
     runner.run(argv)
+    if detach:
+        print(f"VM {name} avviata in background (PID {instances.running_pid(name)}). Per spegnerla: sqemu64 stop {name}")
 
 
 def print_inventory():
@@ -203,7 +223,8 @@ def print_inventory():
     for name in names:
         vm = config.load(name)
         screen = vm.display or "serial"
-        print(f"  {name}  RAM {vm.ram}, CPU {vm.cpus}, dischi {len(vm.disks)}, rete {vm.network}, schermo {screen}")
+        mode = ", background" if vm.background else ""
+        print(f"  {name}  RAM {vm.ram}, CPU {vm.cpus}, dischi {len(vm.disks)}, rete {vm.network}, schermo {screen}{mode}")
     if not names:
         print("  (nessuna)")
 

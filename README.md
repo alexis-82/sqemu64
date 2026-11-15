@@ -63,8 +63,33 @@ sqemu64 start debian                           # avvio normale
 | 11 | Elenco | `sqemu64 list` |
 | 12 | Dipendenze | `sqemu64 deps [--install]` |
 | 13 | Bridge sul Wi-Fi | `sqemu64 network setup-wifi BRIDGE IP` e `network remove-wifi BRIDGE` |
+| 14 | VM in esecuzione | `sqemu64 ps` |
+| 15 | Console in background | `sqemu64 console VM` |
+| 16 | Spegnere una VM | `sqemu64 stop VM [--force]` |
 
 Con `--dry-run` i comandi `start` e `shell` mostrano la riga di QEMU senza eseguirla.
+
+## Più VM insieme
+
+Dal menu, dopo rete e schermo, scegli `2 = in background`: la VM parte e torni subito al
+menu, da cui puoi avviarne altre. La scelta viene salvata nella VM, come schermo e rete,
+e riproposta ai prossimi avvii. Da riga di comando `sqemu64 start` usa la scelta salvata;
+`-d` (o `--detach`) e `--no-detach` valgono solo per quell'avvio.
+
+```bash
+sqemu64 start debian -d
+sqemu64 start arch -d --spice 5901    # ogni VM SPICE vuole una porta diversa
+sqemu64 ps                            # VM in esecuzione
+sqemu64 console debian                # console seriale; Ctrl-] per staccarsi
+sqemu64 stop debian                   # spegnimento ACPI, come il tasto di accensione
+sqemu64 stop debian --force           # chiude subito QEMU
+```
+
+Con la console seriale in background, il terminale viene sostituito da un socket a cui
+`sqemu64 console` si collega tramite `socat`: ci si può staccare e ricollegare quando si
+vuole, ma ciò che la VM scrive mentre nessuno è collegato va perso (se lo schermo è vuoto,
+premi Invio). La stessa VM non può essere avviata due volte. PID e socket sono in
+`$XDG_RUNTIME_DIR/sqemu64/NOME/`.
 
 Per usare SPICE dal menu, scegli `1 = SPICE` quando viene chiesto lo schermo. Da riga di
 comando, aggiungi `--spice 5900` a `sqemu64 start`, solo per quell'avvio.
@@ -172,6 +197,7 @@ concederli fino alla rimozione della chiavetta.
 ## Console e grafica
 
 Le VM usano il terminale come console seriale: per chiuderle premi `Ctrl-A` e poi `X`.
+In background la console si apre con `sqemu64 console NOME` (vedi [Più VM insieme](#più-vm-insieme)).
 Il sistema ospite deve avere una console seriale attiva (`console=ttyS0`): se il
 terminale resta vuoto o si ferma dopo il BIOS, in genere è questo il motivo. Molte ISO
 di installazione, come quella di Debian, e molti sistemi installati scrivono solo sullo

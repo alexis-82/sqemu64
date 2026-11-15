@@ -58,6 +58,7 @@ class VM:
     audio: str = "none"
     display: str | None = None  # None: nessuna scelta salvata, si usa la console seriale
     spice_port: int = 5900
+    background: bool = False  # avvio in background, con il terminale libero
     mac: str = field(default_factory=random_mac)
 
     def __post_init__(self):
@@ -72,12 +73,14 @@ class VM:
         if self.display is not None:
             validate.choice(self.display, validate.DISPLAYS, "Schermo")
         validate.port(self.spice_port)
+        if not isinstance(self.background, bool):
+            raise SqemuError(f"Valore non valido per background: {self.background!r} (usa true o false).")
         validate.mac(self.mac)
 
 
 def to_toml(vm):
     lines = []
-    for key in ("name", "ram", "cpus", "network", "nic", "vga", "disk_interface", "audio", "display", "spice_port", "mac"):
+    for key in ("name", "ram", "cpus", "network", "nic", "vga", "disk_interface", "audio", "display", "spice_port", "background", "mac"):
         value = getattr(vm, key)
         if value is not None:
             lines.append(f"{key} = {json.dumps(value, ensure_ascii=False)}")

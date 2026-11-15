@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, config, deps, disks, menu, network, usb, validate, vm_manager
+from . import __version__, config, deps, disks, instances, menu, network, usb, validate, vm_manager
 from .validate import SqemuError
 
 
@@ -14,6 +14,10 @@ def _add_run_options(parser):
     parser.add_argument("--usb", metavar="DEV", help="chiavetta USB da collegare, per esempio sdb")
     parser.add_argument("--display", choices=validate.DISPLAYS, help="schermo solo per questo avvio")
     parser.add_argument("--network", help="rete solo per questo avvio: user, none, tap:<nome>, bridge:<nome>")
+    parser.add_argument(
+        "-d", "--detach", action=argparse.BooleanOptionalAction,
+        help="avvia in background e libera il terminale; --no-detach forza il primo piano (predefinito: scelta salvata)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="mostra il comando senza eseguirlo")
 
 
@@ -26,6 +30,12 @@ def build_parser():
     commands.add_parser("list", help="elenca VM e dischi")
     commands.add_parser("folder", help="apre la cartella dei dati")
     commands.add_parser("usb", help="elenca le chiavette USB utilizzabili")
+    commands.add_parser("ps", help="elenca le VM in esecuzione")
+    stop = commands.add_parser("stop", help="spegne una VM in esecuzione")
+    stop.add_argument("name")
+    stop.add_argument("--force", action="store_true", help="chiude QEMU senza attendere il sistema ospite")
+    console = commands.add_parser("console", help="si collega alla console seriale di una VM in background")
+    console.add_argument("name")
     dependencies = commands.add_parser("deps", help="controlla le dipendenze")
     dependencies.add_argument("--install", action="store_true", help="installa i pacchetti con sudo")
 
@@ -132,7 +142,7 @@ def _start(args, name, **options):
         network.prepare_vm(name, args.network, confirm=_ask_confirmation)
     vm_manager.start(
         name, dry_run=args.dry_run, ram=args.ram, cpus=args.cpus, usb_device=args.usb,
-        display=args.display, network=args.network, **options,
+        display=args.display, network=args.network, detach=args.detach, **options,
     )
 
 
@@ -164,6 +174,12 @@ def dispatch(args):
         vm_manager.open_folder()
     elif command == "usb":
         _run_usb()
+    elif command == "ps":
+        instances.print_running()
+    elif command == "stop":
+        instances.stop(args.name, force=args.force)
+    elif command == "console":
+        instances.console(args.name)
     elif command == "deps":
         deps.install() if args.install else deps.report()
     elif command == "disk":

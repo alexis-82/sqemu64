@@ -20,6 +20,8 @@ class RunOptions:
     usb_device: str | None = None
     spice_port: int | None = None
     display: str | None = None
+    run_dir: str | None = None  # PID e socket QMP, per elencare e spegnere la VM
+    detach: bool = False  # QEMU in background: il terminale resta libero
 
 
 def _quote(value):
@@ -52,6 +54,8 @@ def _audio_args(vm):
 
 def build_argv(vm, options=None):
     options = options or RunOptions()
+    if options.detach and not options.run_dir:
+        raise ValueError("detach richiede run_dir")
     argv = [
         QEMU,
         "-name", vm.name,
@@ -96,7 +100,19 @@ def build_argv(vm, options=None):
         ]
     else:
         argv += ["-vga", vm.vga]
-        if display == "serial":
+        if display == "serial" and options.detach:
+            # senza terminale la console seriale passa da un socket, a cui ci si collega con socat
+            serial = f"{options.run_dir}/serial.sock"
+            argv += ["-display", "none", "-monitor", "none", "-serial", f"unix:{_quote(serial)},server=on,wait=off"]
+        elif display == "serial":
             argv += ["-nographic"]
+
+    if options.run_dir:
+        argv += [
+            "-pidfile", f"{options.run_dir}/qemu.pid",
+            "-qmp", f"unix:{_quote(options.run_dir + '/qmp.sock')},server=on,wait=off",
+        ]
+    if options.detach:
+        argv += ["-daemonize"]
 
     return argv

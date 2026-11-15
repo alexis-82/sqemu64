@@ -52,6 +52,7 @@ overrides:
       - qemu-system-modules-spice
       - virt-viewer
       - dnsmasq
+      - socat
   rpm:
     depends:
       - python3 >= 3.11
@@ -64,6 +65,7 @@ overrides:
       - (qemu-char-spice or qemu-chardev-spice)
       - virt-viewer
       - dnsmasq
+      - socat
   archlinux:
     depends:
       - python>=3.11
@@ -75,6 +77,7 @@ overrides:
       - qemu-chardev-spice
       - virt-viewer
       - dnsmasq
+      - socat
   apk:
     depends:
       - python3

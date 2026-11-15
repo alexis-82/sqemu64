@@ -1,6 +1,6 @@
 """Menu interattivo: stessa logica della riga di comando."""
 
-from . import config, deps, disks, network, usb, validate, vm_manager
+from . import config, deps, disks, instances, network, usb, validate, vm_manager
 from .validate import SqemuError
 
 GREEN = "\033[92m"
@@ -37,12 +37,17 @@ MENU = """
 [12] Installazione delle dipendenze
 [13] Bridge sul Wi-Fi
 
+[14] VM in esecuzione
+[15] Console di una VM in background
+[16] Spegni una VM
+
 [0] Uscire
 """
 
 
 SCREENS = {"1": "spice", "2": "serial", "3": "window"}
 NETWORKS = {"1": "user", "2": "bridge", "3": "tap", "4": "none"}
+MODES = {"1": False, "2": True}
 
 
 def _ask(prompt, default=None):
@@ -141,9 +146,19 @@ def _choose_network(name):
     vm_manager.save_network(name, f"{selected}:{interface}")
 
 
+def _choose_mode(name):
+    """Chiede se avviare in background e lo salva: con Invio resta la scelta della VM."""
+    default = "2" if config.load(name).background else "1"
+    choice = _required("Avvio: 1 = in questo terminale, 2 = in background (menu libero)", default)
+    if choice not in MODES:
+        raise SqemuError(f"Scelta non valida: {choice!r}.")
+    vm_manager.save_background(name, MODES[choice])
+
+
 def _choose_devices(name, live=False):
     _choose_network(name)
     _choose_screen(name, live=live)
+    _choose_mode(name)
 
 
 def _ask_extra_disks():
@@ -191,6 +206,23 @@ def _clone_disk():
 def _start(name, **options):
     network.prepare_vm(name, confirm=lambda: _yes("Procedere?"))
     vm_manager.start(name, **options)
+
+
+def _ask_running():
+    found = instances.list_running()
+    if not found:
+        raise SqemuError("Nessuna VM in esecuzione.")
+    print("VM in esecuzione:", ", ".join(name for name, _ in found))
+    return _required("Nome della VM", found[0][0] if len(found) == 1 else None)
+
+
+def _console():
+    instances.console(_ask_running())
+
+
+def _stop():
+    name = _ask_running()
+    instances.stop(name, force=_yes("Chiudere subito, senza attendere il sistema ospite?"))
 
 
 def _start_disk():
@@ -270,6 +302,9 @@ ACTIONS = {
     "11": vm_manager.print_inventory,
     "12": _install,
     "13": _wifi_bridge,
+    "14": instances.print_running,
+    "15": _console,
+    "16": _stop,
 }
 
 

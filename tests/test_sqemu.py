@@ -3,6 +3,8 @@ import json
 import os
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import tempfile
 import threading
@@ -10,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from src import cli, config, deps, disks, menu, network, qemu, usb, validate, vm_manager
+from src import cli, config, deps, disks, instances, menu, network, qemu, runner, usb, validate, vm_manager
 from src.config import VM, Disk
 from src.validate import SqemuError
 
@@ -31,7 +33,7 @@ class TempData(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.tmp = Path(directory.name)
-        patcher = mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(self.tmp)})
+        patcher = mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(self.tmp), "XDG_RUNTIME_DIR": str(self.tmp / "run")})
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -403,14 +405,14 @@ class MenuTests(TempData):
 
     def _live_call(self, *screen_answers):
         config.save(make_vm())
-        answers = ["7", "debian", "/iso/d.iso", "", "", "n", "", *screen_answers]
+        answers = ["7", "debian", "/iso/d.iso", "", "", "n", "", *screen_answers, ""]
         with mock.patch("src.vm_manager.start") as start:
             output = self._run(*answers)
         return start, output
 
     def _start_disk_call(self, *screen_answers):
         with mock.patch("src.vm_manager.start") as start:
-            output = self._run("5", "debian", "", "", "n", "", *screen_answers)
+            output = self._run("5", "debian", "", "", "n", "", *screen_answers, "")
         return start, output
 
     def test_live_offers_spice_when_nothing_is_saved(self):
@@ -441,7 +443,7 @@ class MenuTests(TempData):
 
     def _live_call_keep(self):
         with mock.patch("src.vm_manager.start"):
-            self._run("7", "debian", "/iso/d.iso", "", "", "n", "", "")
+            self._run("7", "debian", "/iso/d.iso", "", "", "n", "", "", "")
 
     def test_invalid_screen_saves_nothing(self):
         start, output = self._live_call("9")
@@ -460,7 +462,7 @@ class MenuTests(TempData):
         with mock.patch("src.vm_manager.start") as start, mock.patch("src.network.prepare_vm"), mock.patch(
             "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], ["tap0"])
         ):
-            output = self._run("5", "debian", "", "", "n", *answers, *screen)
+            output = self._run("5", "debian", "", "", "n", *answers, *screen, "")
         return start, output
 
     def test_network_choice_is_saved_and_proposed_again(self):
@@ -471,7 +473,7 @@ class MenuTests(TempData):
         with mock.patch("src.vm_manager.start"), mock.patch("src.network.prepare_vm"), mock.patch(
             "src.vm_manager.list_interfaces", return_value=(["br0", "virbr0"], [])
         ):
-            self._run("5", "debian", "", "", "n", "", "", "2")
+            self._run("5", "debian", "", "", "n", "", "", "2", "")
         self.assertEqual(config.load("debian").network, "bridge:br0")
 
     def test_network_other_choices(self):
@@ -502,11 +504,11 @@ class MenuTests(TempData):
         config.save(make_vm())
         config.save(make_vm(name="shell"))
         cases = {
-            "5": ["5", "debian", "", "", "n", "", "2"],
-            "6": ["6", "debian", "", "", "/d/b.img", "n", "", "2"],
-            "7": ["7", "debian", "/iso/d.iso", "", "", "n", "", "2"],
-            "8": ["8", "debian", "/d/b.img", "n", "/iso/d.iso", "", "", "", "2"],
-            "9": ["9", "", "", "n", "", "2"],
+            "5": ["5", "debian", "", "", "n", "", "2", ""],
+            "6": ["6", "debian", "", "", "/d/b.img", "n", "", "2", ""],
+            "7": ["7", "debian", "/iso/d.iso", "", "", "n", "", "2", ""],
+            "8": ["8", "debian", "/d/b.img", "n", "/iso/d.iso", "", "", "", "2", ""],
+            "9": ["9", "", "", "n", "", "2", ""],
         }
         for option, answers in cases.items():
             with self.subTest(option=option), mock.patch("src.vm_manager.start") as start:
@@ -514,7 +516,7 @@ class MenuTests(TempData):
                 start.assert_called_once()
 
     def test_every_menu_option_exists(self):
-        expected = {"1", "2", "3", "4", "4.5", "5", "6", "7", "8", "9", "10", "11", "12", "13"}
+        expected = {"1", "2", "3", "4", "4.5", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"}
         self.assertEqual(set(menu.ACTIONS), expected)
 
     def test_menu_text_matches_the_actions(self):
@@ -525,6 +527,273 @@ class MenuTests(TempData):
     def test_end_of_input_exits_cleanly(self):
         with mock.patch("builtins.input", side_effect=EOFError), mock.patch("builtins.print"):
             menu.run()
+
+
+class DetachArgvTests(unittest.TestCase):
+    def test_runtime_files_are_always_created(self):
+        argv = qemu.build_argv(make_vm(), qemu.RunOptions(run_dir="/run/x"))
+        self.assertEqual(value_after(argv, "-pidfile"), ["/run/x/qemu.pid"])
+        self.assertEqual(value_after(argv, "-qmp"), ["unix:/run/x/qmp.sock,server=on,wait=off"])
+        self.assertIn("-nographic", argv)
+        self.assertNotIn("-daemonize", argv)
+
+    def test_detached_serial_uses_a_socket(self):
+        argv = qemu.build_argv(make_vm(), qemu.RunOptions(run_dir="/run/x", detach=True))
+        self.assertNotIn("-nographic", argv)  # QEMU rifiuta -nographic con -daemonize
+        self.assertIn("-daemonize", argv)
+        self.assertEqual(value_after(argv, "-serial"), ["unix:/run/x/serial.sock,server=on,wait=off"])
+        self.assertEqual(value_after(argv, "-display"), ["none"])
+
+    def test_detached_graphics_keep_the_default_serial(self):
+        for options in (qemu.RunOptions(display="window"), qemu.RunOptions(spice_port=5900)):
+            options.run_dir, options.detach = "/run/x", True
+            argv = qemu.build_argv(make_vm(), options)
+            self.assertIn("-daemonize", argv)
+            self.assertEqual(value_after(argv, "-serial"), [])
+
+    def test_commas_in_the_runtime_dir_cannot_add_options(self):
+        argv = qemu.build_argv(make_vm(), qemu.RunOptions(run_dir="/run/a,b", detach=True))
+        self.assertEqual(value_after(argv, "-qmp"), ["unix:/run/a,,b/qmp.sock,server=on,wait=off"])
+        self.assertEqual(value_after(argv, "-serial"), ["unix:/run/a,,b/serial.sock,server=on,wait=off"])
+
+    def test_detach_requires_a_runtime_dir(self):
+        with self.assertRaises(ValueError):
+            qemu.build_argv(make_vm(), qemu.RunOptions(detach=True))
+
+
+class FakeQmp:
+    """Server QMP minimo: registra i comandi ricevuti e risponde come QEMU."""
+
+    def __init__(self, path, error_on=None):
+        self.commands = []
+        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.server.bind(str(path))
+        self.server.listen(1)
+        self.error_on = error_on
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
+
+    def _serve(self):
+        connection, _ = self.server.accept()
+        with connection, connection.makefile("rwb") as stream:
+            stream.write(b'{"QMP": {"version": {}}}\n{"event": "RESUME"}\n')
+            stream.flush()
+            for line in stream:
+                command = json.loads(line)["execute"]
+                self.commands.append(command)
+                reply = {"error": {"desc": "no"}} if command == self.error_on else {"return": {}}
+                stream.write(json.dumps(reply).encode() + b"\n")
+                stream.flush()
+
+    def close(self):
+        self.thread.join(5)
+        self.server.close()
+
+
+class InstancesTests(TempData):
+    def _fake_running(self, name, pid=4242, console=False):
+        directory = instances.run_dir(name, create=True)
+        (directory / instances.PIDFILE).write_text(f"{pid}\n")
+        if console:
+            (directory / instances.SERIAL_SOCKET).touch()
+        return directory
+
+    def test_runtime_dir_is_private_and_isolated(self):
+        directory = instances.run_dir("debian", create=True)
+        self.assertEqual(directory, self.tmp / "run/sqemu64/debian")
+        self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+        with self.assertRaises(SqemuError):
+            instances.run_dir("../etc")
+
+    def test_fallback_without_xdg_runtime_dir(self):
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": ""}):
+            self.assertEqual(instances.run_dir("debian"), self.tmp / "sqemu64/run/debian")
+
+    def test_too_long_socket_paths_are_refused(self):
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(self.tmp / ("x" * 100))}):
+            with self.assertRaises(SqemuError):
+                instances.run_dir("debian", create=True)
+
+    def test_stale_or_foreign_pid_is_not_running(self):
+        self._fake_running("debian")
+        with mock.patch("src.instances._is_qemu", return_value=False):
+            self.assertIsNone(instances.running_pid("debian"))
+            instances.check_not_running("debian")
+        (instances.run_dir("debian") / instances.PIDFILE).write_text("rotto")
+        self.assertIsNone(instances.running_pid("debian"))
+        self.assertIsNone(instances.running_pid("mai-avviata"))
+
+    def test_running_vm_cannot_start_twice(self):
+        config.save(make_vm())
+        self._fake_running("debian")
+        with mock.patch("src.instances._is_qemu", return_value=True), mock.patch("src.runner.run") as run:
+            with self.assertRaises(SqemuError) as raised:
+                vm_manager.start("debian")
+            run.assert_not_called()
+        self.assertIn("stop debian", str(raised.exception))
+
+    def test_is_qemu_reads_the_process_name(self):
+        self.assertFalse(instances._is_qemu(os.getpid()))
+        self.assertFalse(instances._is_qemu(2**22 + 1))
+
+    def test_ps_lists_only_running_vms(self):
+        self._fake_running("a", pid=1, console=True)
+        self._fake_running("b", pid=2)
+        self._fake_running("old", pid=3)
+        with mock.patch("src.instances._is_qemu", side_effect=lambda pid: pid != 3), mock.patch(
+            "builtins.print"
+        ) as printed:
+            self.assertEqual(instances.list_running(), [("a", 1), ("b", 2)])
+            instances.print_running()
+        output = "\n".join(" ".join(map(str, call.args)) for call in printed.call_args_list)
+        self.assertIn("a  PID 1  console: sqemu64 console a", output)
+        self.assertIn("b  PID 2", output)
+        self.assertNotIn("console b", output)
+        self.assertNotIn("old", output)
+
+    def test_stop_sends_an_acpi_powerdown(self):
+        directory = self._fake_running("debian")
+        server = FakeQmp(directory / instances.QMP_SOCKET)
+        with mock.patch("src.instances._is_qemu", return_value=True), mock.patch("builtins.print"):
+            instances.stop("debian")
+        server.close()
+        self.assertEqual(server.commands, ["qmp_capabilities", "system_powerdown"])
+
+    def test_qmp_errors_are_reported(self):
+        directory = self._fake_running("debian")
+        server = FakeQmp(directory / instances.QMP_SOCKET, error_on="system_powerdown")
+        with mock.patch("src.instances._is_qemu", return_value=True), self.assertRaises(SqemuError):
+            instances.stop("debian")
+        server.close()
+        with mock.patch("src.instances._is_qemu", return_value=True), self.assertRaises(SqemuError):
+            instances.stop("debian")  # nessun server in ascolto
+
+    def test_force_stop_terminates_qemu(self):
+        self._fake_running("debian", pid=4242)
+        with mock.patch("src.instances._is_qemu", return_value=True), mock.patch("os.kill") as kill, mock.patch(
+            "builtins.print"
+        ):
+            instances.stop("debian", force=True)
+        kill.assert_called_once_with(4242, signal.SIGTERM)
+
+    def test_stop_and_console_require_a_running_vm(self):
+        for action in (instances.stop, instances.console):
+            with self.subTest(action=action.__name__), self.assertRaises(SqemuError):
+                action("debian")
+
+    def test_console_uses_socat_with_an_escape_key(self):
+        directory = self._fake_running("debian", console=True)
+        with mock.patch("src.instances._is_qemu", return_value=True), mock.patch(
+            "shutil.which", return_value="/usr/bin/socat"
+        ), mock.patch("src.runner.run") as run, mock.patch("builtins.print"):
+            instances.console("debian")
+        self.assertEqual(
+            run.call_args.args[0],
+            ["socat", "-,raw,echo=0,escape=0x1d", f"UNIX-CONNECT:{directory / instances.SERIAL_SOCKET}"],
+        )
+
+    def test_console_explains_what_is_missing(self):
+        self._fake_running("debian")
+        with mock.patch("src.instances._is_qemu", return_value=True):
+            with self.assertRaises(SqemuError) as raised:
+                instances.console("debian")
+            self.assertIn("primo piano", str(raised.exception))
+            (instances.run_dir("debian") / instances.SERIAL_SOCKET).touch()
+            with mock.patch("shutil.which", return_value=None), self.assertRaises(SqemuError) as raised:
+                instances.console("debian")
+            self.assertIn("socat", str(raised.exception))
+
+    def test_start_removes_a_stale_console_socket(self):
+        config.save(make_vm())
+        stale = instances.run_dir("debian", create=True) / instances.SERIAL_SOCKET
+        stale.touch()
+        with mock.patch("src.deps.kvm_problem", return_value=None), mock.patch("src.runner.run"), mock.patch(
+            "builtins.print"
+        ):
+            vm_manager.start("debian")
+        self.assertFalse(stale.exists())
+
+    def test_cli_commands(self):
+        config.save(make_vm())
+        with mock.patch("src.network.prepare_vm"), mock.patch("src.vm_manager.start") as start:
+            self.assertEqual(cli.main(["start", "debian", "-d"]), 0)
+            self.assertTrue(start.call_args.kwargs["detach"])
+            self.assertEqual(cli.main(["shell", "--detach"]), 0)
+            self.assertTrue(start.call_args.kwargs["detach"])
+            self.assertEqual(cli.main(["start", "debian", "--no-detach"]), 0)
+            self.assertIs(start.call_args.kwargs["detach"], False)
+            self.assertEqual(cli.main(["start", "debian"]), 0)
+            self.assertIsNone(start.call_args.kwargs["detach"])
+        with mock.patch("src.instances.stop") as stop, mock.patch("src.instances.console") as console, mock.patch(
+            "src.instances.print_running"
+        ) as ps:
+            cli.main(["stop", "debian", "--force"])
+            cli.main(["console", "debian"])
+            cli.main(["ps"])
+        stop.assert_called_once_with("debian", force=True)
+        console.assert_called_once_with("debian")
+        ps.assert_called_once()
+
+    def test_saved_background_is_used_unless_overridden(self):
+        config.save(make_vm(background=True))
+        self.assertIn("-daemonize", vm_manager.prepare_start("debian"))
+        self.assertNotIn("-daemonize", vm_manager.prepare_start("debian", detach=False))
+        config.save(make_vm())
+        self.assertIn("-daemonize", vm_manager.prepare_start("debian", detach=True))
+
+    def test_background_is_saved_and_validated(self):
+        vm = make_vm(background=True)
+        self.assertEqual(config.from_toml(config.to_toml(vm)), vm)
+        self.assertFalse(config.from_toml('name = "old"\n').background)
+        with self.assertRaises(SqemuError):
+            config.from_toml('name = "x"\nbackground = "si"\n')
+
+    def test_dry_run_shows_the_detached_command(self):
+        config.save(make_vm())
+        with mock.patch("builtins.print") as printed:
+            vm_manager.start("debian", dry_run=True, detach=True)
+        self.assertIn("-daemonize", printed.call_args.args[0])
+
+
+class MenuDetachTests(TempData):
+    _run = MenuTests._run
+
+    def _start(self, mode):
+        with mock.patch("src.deps.kvm_problem", return_value=None), mock.patch(
+            "src.runner.run"
+        ) as run, mock.patch("src.network.prepare_vm"):
+            self._run("5", "debian", "", "", "n", "", "2", mode)
+        return run.call_args.args[0]
+
+    def test_background_choice_is_saved_and_proposed_again(self):
+        config.save(make_vm())
+        self.assertNotIn("-daemonize", self._start(""))
+        self.assertFalse(config.load("debian").background)
+        self.assertIn("-daemonize", self._start("2"))
+        self.assertTrue(config.load("debian").background)
+        self.assertIn("-daemonize", self._start(""))
+        self.assertNotIn("-daemonize", self._start("1"))
+        self.assertFalse(config.load("debian").background)
+
+    def test_invalid_mode_saves_nothing(self):
+        config.save(make_vm())
+        with mock.patch("src.vm_manager.start") as start:
+            output = self._run("5", "debian", "", "", "n", "", "2", "3")
+        start.assert_not_called()
+        self.assertIn("Scelta non valida", output)
+        self.assertFalse(config.load("debian").background)
+
+    def test_running_vm_options(self):
+        with mock.patch("src.instances.list_running", return_value=[("debian", 1)]), mock.patch(
+            "src.instances.stop"
+        ) as stop, mock.patch("src.instances.console") as console:
+            self._run("16", "", "s", "15", "")
+        stop.assert_called_once_with("debian", force=True)
+        console.assert_called_once_with("debian")
+
+    def test_no_running_vm(self):
+        with mock.patch("src.instances.list_running", return_value=[]):
+            self.assertIn("Nessuna VM in esecuzione", self._run("15"))
 
 
 class CliTests(TempData):
@@ -984,7 +1253,7 @@ class WifiBridgeVmTests(TempData):
         calls = []
         with mock.patch("src.network.prepare_vm", side_effect=lambda *a, **k: calls.append("prepare")), mock.patch(
             "src.vm_manager.start", side_effect=lambda *a, **k: calls.append("start")
-        ), mock.patch("builtins.input", side_effect=["5", "debian", "", "", "n", "", "2", "0"]), mock.patch("builtins.print"):
+        ), mock.patch("builtins.input", side_effect=["5", "debian", "", "", "n", "", "2", "", "0"]), mock.patch("builtins.print"):
             menu.run()
         self.assertEqual(calls, ["prepare", "start"])
 
@@ -1077,6 +1346,28 @@ class RealBootTests(TempData):
         raw = self._raw_disk()
         extra = disks.create("extra", "1M")
         self._boots(str(raw), disk_values=[extra], ram="256M", cpus=1)
+
+    def test_detached_vm_frees_the_terminal_and_stops(self):
+        vm_manager.create_vm("bg", disk_values=[str(self._raw_disk())])
+        runner.run(vm_manager.prepare_start("bg", detach=True, network="none"))
+        try:
+            pid = instances.running_pid("bg")
+            self.assertIsNotNone(pid)
+            self.assertTrue(instances.has_console("bg"))
+            with self.assertRaises(SqemuError):
+                instances.check_not_running("bg")
+            with socket.socket(socket.AF_UNIX) as client:
+                client.connect(str(instances.run_dir("bg") / instances.SERIAL_SOCKET))
+            instances.qmp(instances.run_dir("bg") / instances.QMP_SOCKET, "quit")
+            for _ in range(50):
+                if instances.running_pid("bg") is None:
+                    break
+                threading.Event().wait(0.1)
+            self.assertIsNone(instances.running_pid("bg"))
+        finally:
+            pid = instances.running_pid("bg")
+            if pid:
+                os.kill(pid, signal.SIGKILL)
 
     def test_chardev_probe_on_real_qemu(self):
         """Regressione: i moduli non sono elencati da '-chardev help' pur essendo disponibili."""
